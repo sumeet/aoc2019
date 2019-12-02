@@ -1,0 +1,12 @@
+[package]
+name = "aoc2019"
+version = "0.1.0"
+authors = ["smt"]
+edition = "2018"
+
+[lib]
+bench = false
+
+[dependencies]
+aoc-runner = "*"
+aoc-runner-derive = "*"
