@@ -1,4 +1,3 @@
-use std::ops::Div;
 use std::convert::TryInto;
 
 #[aoc(day1, part1)]
@@ -14,12 +13,12 @@ pub fn solve_part2(input: &str) -> usize {
 }
 
 fn calculate_fuel(mass: usize) -> usize {
-    let mass = mass as isize;
-    let fuel_required = (mass / 3) - 2;
-    if fuel_required > 0 {
-        fuel_required as usize + calculate_fuel(fuel_required.try_into().unwrap())
-    } else {
-        0
+    let fuel_required = (mass / 3).checked_sub(2);
+    match fuel_required {
+        Some(0) | None => {
+            0
+        },
+        Some(fuel_required) => fuel_required + calculate_fuel(fuel_required)
     }
 }
 
