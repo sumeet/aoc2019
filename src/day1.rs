@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 #[aoc(day1, part1)]
 pub fn solve_part1(input: &str) -> usize {
     let masses = input.lines().map(|i| i.parse::<usize>().unwrap());
