@@ -1,12 +1,6 @@
-#[aoc(day2, part1)]
-pub fn solve_part1(input: &str) -> usize {
-    let mut proggy : Vec<usize> = input.lines().nth(0).unwrap().split(',')
-        .map(|opcode_s| opcode_s.parse().unwrap()).collect();
-
-    // 1202 protocol
-    proggy[1] = 12;
-    proggy[2] = 2;
-
+fn run_proggy(mut proggy: Vec<usize>, noun: usize, verb: usize) -> usize {
+    proggy[1] = noun;
+    proggy[2] = verb;
     let mut current_pos = 0;
     loop {
         match proggy[current_pos] {
@@ -28,4 +22,29 @@ pub fn solve_part1(input: &str) -> usize {
             _ => panic!("invalid operation"),
         }
     }
+}
+
+#[aoc(day2, part1)]
+pub fn solve_part1(input: &str) -> usize {
+    let proggy : Vec<usize> = input.lines().nth(0).unwrap().split(',')
+        .map(|opcode_s| opcode_s.parse().unwrap()).collect();
+
+    // 1202 protocol
+    run_proggy(proggy, 12, 2)
+}
+
+#[aoc(day2, part2)]
+pub fn solve_part2(input: &str) -> usize {
+    let proggy : Vec<usize> = input.lines().nth(0).unwrap().split(',')
+        .map(|opcode_s| opcode_s.parse().unwrap()).collect();
+
+    for noun in 0..100 {
+        for verb in 0..100 {
+            let output = run_proggy(proggy.clone(), noun, verb);
+            if output == 19690720 {
+                return (100 * noun) + verb
+            }
+        }
+    }
+    panic!("try some different values")
 }
