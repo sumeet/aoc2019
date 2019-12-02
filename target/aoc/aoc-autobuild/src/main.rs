@@ -30,4 +30,22 @@ fn main() {
             Err(e) => eprintln!("Day 1 - Part 1 : FAILED while generating :\n{:#?}\n", e)
         }
     }
+    {
+        let start_time = Instant::now();
+
+        match Factory::day1_part2(input_day1.clone()) {
+            Ok(runner) => {
+                let inter_time = Instant::now();
+
+                match runner.try_run() {
+                    Ok(result) => {
+                        let final_time = Instant::now();
+                        println!("Day 1 - Part 2 : {}\n\tgenerator: {:?},\n\trunner: {:?}\n", result, (inter_time - start_time), (final_time - inter_time));
+                    },
+                    Err(e) => eprintln!("Day 1 - Part 2 : FAILED while running :\n{:#?}\n", e)
+                }
+            },
+            Err(e) => eprintln!("Day 1 - Part 2 : FAILED while generating :\n{:#?}\n", e)
+        }
+    }
 }
