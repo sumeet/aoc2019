@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+use std::convert::TryInto;
 
 #[derive(Debug)]
 pub enum Turn {
@@ -10,8 +11,8 @@ pub enum Turn {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Point {
-    x: usize,
-    y: usize,
+    x: isize,
+    y: isize,
 }
 
 impl Point {
@@ -51,6 +52,92 @@ pub fn solve_part1(input: &str) -> usize {
     }).min().unwrap()
 }
 
+#[aoc(day3, part2)]
+pub fn solve_part2(input: &str) -> usize {
+    let wire_paths : Vec<Vec<Turn>> = input.lines().map(|line| {
+        line.split(",").filter(|s| !s.is_empty()).map(|s| {
+            match s.chars().nth(0).unwrap() {
+                'R' => {
+                    Turn::Right(s.chars().skip(1).collect::<String>().parse().unwrap())
+                }
+                'U' => {
+                    Turn::Up(s.chars().skip(1).collect::<String>().parse().unwrap())
+                }
+                'L' => {
+                    Turn::Left(s.chars().skip(1).collect::<String>().parse().unwrap())
+                }
+                'D' => {
+                    Turn::Down(s.chars().skip(1).collect::<String>().parse().unwrap())
+                }
+                invalid => panic!(format!("invalid prefix: {}", invalid))
+            }
+        }).collect()
+    }).collect();
+
+    let first_wire_coordinates = map_coordinates_with_steps(&wire_paths[0]);
+    let second_wire_coordinates = map_coordinates_with_steps(&wire_paths[1]);
+
+    let intersection = first_wire_coordinates.coords.intersection(
+        &second_wire_coordinates.coords);
+    intersection.map(|point| {
+        let first_wire_steps = first_wire_coordinates.steps[point];
+        let second_wire_steps = second_wire_coordinates.steps[point];
+        first_wire_steps + second_wire_steps
+    }).min().unwrap()
+}
+
+struct CoordsWithSteps {
+    coords: HashSet<Point>,
+    steps: HashMap<Point, usize>,
+}
+
+fn map_coordinates_with_steps(turns: &[Turn]) -> CoordsWithSteps {
+    let mut seen_points = HashSet::new();
+    let mut current_point = Point::origin();
+    let mut steps_taken = HashMap::new();
+    let mut num_steps_taken = 0;
+    for turn in turns {
+        match turn {
+            Turn::Right(n) => {
+                for _ in 0..*n {
+                    current_point.x += 1;
+                    num_steps_taken += 1;
+                    seen_points.insert(current_point.clone());
+                    steps_taken.insert(current_point.clone(), num_steps_taken);
+                }
+            }
+            Turn::Left(n) => {
+                for _ in 0..*n {
+                    current_point.x -= 1;
+                    num_steps_taken += 1;
+                    seen_points.insert(current_point.clone());
+                    steps_taken.insert(current_point.clone(), num_steps_taken);
+                }
+            }
+            Turn::Up(n) => {
+                for _ in 0..*n {
+                    current_point.y += 1;
+                    num_steps_taken += 1;
+                    seen_points.insert(current_point.clone());
+                    steps_taken.insert(current_point.clone(), num_steps_taken);
+                }
+            }
+            Turn::Down(n) => {
+                for _ in 0..*n {
+                    current_point.y -= 1;
+                    num_steps_taken += 1;
+                    seen_points.insert(current_point.clone());
+                    steps_taken.insert(current_point.clone(), num_steps_taken);
+                }
+            }
+        }
+    };
+    CoordsWithSteps {
+        coords: seen_points,
+        steps: steps_taken,
+    }
+}
+
 fn map_coordinates(turns: &[Turn]) -> HashSet<Point> {
     let mut seen_points = HashSet::new();
     let mut current_point = Point::origin();
@@ -65,7 +152,6 @@ fn map_coordinates(turns: &[Turn]) -> HashSet<Point> {
             Turn::Left(n) => {
                 for _ in 0..*n {
                     current_point.x -= 1;
-
                     seen_points.insert(current_point.clone());
                 }
             }
@@ -87,8 +173,8 @@ fn map_coordinates(turns: &[Turn]) -> HashSet<Point> {
 }
 
 fn distance(p1: Point, p2: Point) -> usize {
-    (((p2.x - p1.x).pow(2) + (p2.y - p1.y).pow(2)) as f64).sqrt() as usize
-
+    let d = (p1.x - p2.x).abs() + (p1.y - p2.y).abs();
+    d.try_into().unwrap()
 }
 
 #[cfg(test)]
