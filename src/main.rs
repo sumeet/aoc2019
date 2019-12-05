@@ -1,3 +1,4 @@
+#![feature(is_sorted)]
 extern crate aoc2019;
 extern crate aoc_runner_derive;
 extern crate aoc_runner;
