@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 #[aoc(day6, part1)]
 pub fn solve_part1(input: &str) -> usize {
-    let mut direct_orbits : DefaultHashMap<&str, Vec<&str>> = DefaultHashMap::new(vec![]);
+    let mut direct_orbits = DefaultHashMap::new(vec![]);
 
     for line in input.lines() {
         let mut or = line.split(")");
@@ -32,8 +32,8 @@ pub fn solve_part1(input: &str) -> usize {
 
 #[aoc(day6, part2)]
 pub fn solve_part2(input: &str) -> usize {
-    let mut direct_orbits : DefaultHashMap<&str, Vec<&str>> = DefaultHashMap::new(vec![]);
-    let mut inverted_orbits : DefaultHashMap<&str, Vec<&str>> = DefaultHashMap::new(vec![]);
+    let mut direct_orbits = DefaultHashMap::new(vec![]);
+    let mut inverted_orbits = DefaultHashMap::new(vec![]);
 
     for line in input.lines() {
         let mut or = line.split(")");
