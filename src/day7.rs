@@ -194,16 +194,20 @@ fn get_third_param(proggy: &[String], instruction_pos: usize, mode: ParameterMod
 
 fn generate_all_phase_settings() -> impl Iterator<Item = [u8; 5]> {
     GenIter(move || {
-        for i in 1..5 {
+        for i in 0..5 {
             let mut phase_setting = [99, 99, 99, 99, 99];
             phase_setting[0] = i;
             for j in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
+                let mut phase_setting = phase_setting.clone();
                 phase_setting[1] = j;
                 for k in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
+                    let mut phase_setting = phase_setting.clone();
                     phase_setting[2] = k;
                     for l in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
+                        let mut phase_setting = phase_setting.clone();
                         phase_setting[3] = l;
                         for m in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
+                            let mut phase_setting = phase_setting.clone();
                             phase_setting[4] = m;
                             yield phase_setting;
                         }
@@ -219,10 +223,11 @@ pub fn solve_part1(input: &str) -> isize {
     let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
 
     // initial input signal is 0
-    let mut output_signal = 0;
-    generate_all_phase_settings().map(move |phase_settings| {
+    println!("{} total phase settings", generate_all_phase_settings().count());
+    generate_all_phase_settings().map(|phase_settings| {
+        let mut output_signal = 0;
         for phase_setting in &phase_settings {
-            output_signal = run_amplifier(proggy.clone(), *phase_setting, output_signal)
+            output_signal = run_amplifier(proggy.clone(), *phase_setting, output_signal);
         }
         output_signal
     }).max().unwrap()
@@ -240,4 +245,6 @@ fn run_amplifier(proggy: Vec<String>, phase_setting: u8, input_signal: isize) ->
 #[test]
 fn p1() {
     assert_eq!(65210, solve_part1("3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0"));
+    assert_eq!(54321, solve_part1("3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0"));
+    assert_eq!(43210, solve_part1("3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0"));
 }
