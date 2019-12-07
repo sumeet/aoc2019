@@ -11,3 +11,4 @@ bench = false
 aoc-runner = "*"
 aoc-runner-derive = "*"
 defaultmap = "*"
+gen-iter = {git = "https://github.com/sumeet/gen-iter", branch = "master"}

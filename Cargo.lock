@@ -33,12 +33,18 @@ dependencies = [
  "aoc-runner 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "aoc-runner-derive 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "defaultmap 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gen-iter 0.1.2 (git+https://github.com/sumeet/gen-iter)",
 ]
 
 [[package]]
 name = "defaultmap"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "gen-iter"
+version = "0.1.2"
+source = "git+https://github.com/sumeet/gen-iter#ba1464de7ea5d259c324abc8a4959ddcdcbc6000"
 
 [[package]]
 name = "itoa"
@@ -142,6 +148,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum aoc-runner-derive 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "696802dfe4dd87aa979f63a9e46ae98a31b5eb3d7aff5071de426e9bb3d1cfd2"
 "checksum aoc-runner-internal 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "274b0ba7f3669a45ec0aaacf94eb032a749de880ab776091576cca94037c9982"
 "checksum defaultmap 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8f17a1a14b082225c6758a7f26bc8af696c4a455e7e3995de5ba2875c18bd804"
+"checksum gen-iter 0.1.2 (git+https://github.com/sumeet/gen-iter)" = "<none>"
 "checksum itoa 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "501266b7edd0174f8530248f87f99c88fbe60ca4ef3dd486835b8d8d53136f7f"
 "checksum proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)" = "cf3d2011ab5c909338f7887f4fc896d35932e29146c12c8d01da6b22a80ba759"
 "checksum proc-macro2 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "9c9e470a8dc4aeae2dee2f335e8f533e2d4b347e1434e5671afc49b054592f27"
