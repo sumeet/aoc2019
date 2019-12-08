@@ -1,7 +1,7 @@
 use crate::day7::Instruction::{Add1, Multiply2, Input3, Output4, Halt99, JumpIfTrue5, JumpIfFalse6, LessThan7, Equals8};
 use crate::day7::ParameterMode::{PositionMode0, ImmediateMode1};
-use std::iter::once;
-use gen_iter::GenIter;
+use itertools::Itertools;
+use std::collections::VecDeque;
 
 #[derive(Debug)]
 enum Instruction {
@@ -83,84 +83,6 @@ impl ParameterMode {
     }
 }
 
-
-fn run_proggy(mut proggy: Vec<String>, mut input: impl Iterator<Item = isize>) -> Vec<isize> {
-    let mut current_pos = 0;
-    let mut output = vec![];
-    loop {
-        let instruction = Instruction::parse(&proggy[current_pos].to_string());
-        match instruction {
-            Add1(first_mode, second_mode, third_mode) => {
-                let param_1 = get_first_param(&proggy, current_pos, first_mode);
-                let param_2 = get_second_param(&proggy, current_pos, second_mode);
-                let param_3 = get_third_param(&proggy, current_pos, third_mode);
-                proggy[param_3 as usize] = (param_1 + param_2).to_string();
-                current_pos += 4;
-            },
-            Multiply2(first_mode, second_mode, third_mode) => {
-                let param_1 = get_first_param(&proggy, current_pos, first_mode);
-                let param_2 = get_second_param(&proggy, current_pos, second_mode);
-                let param_3 = get_third_param(&proggy, current_pos, third_mode);
-                proggy[param_3 as usize] = (param_1 * param_2).to_string();
-                current_pos += 4;
-            },
-            Input3 => {
-                let position = get_first_param(&proggy, current_pos, ImmediateMode1) as usize;
-                proggy[position] = input.next().unwrap().to_string();
-                current_pos += 2;
-            },
-            Output4(mode) => {
-                let param = get_first_param(&proggy, current_pos, mode);
-                output.push(param);
-                current_pos += 2;
-            },
-            Halt99 => {
-                return output;
-            },
-            JumpIfTrue5(first_mode, second_mode) => {
-                let param_1 = get_first_param(&proggy, current_pos, first_mode);
-                let param_2 = get_second_param(&proggy, current_pos, second_mode);
-                if param_1 != 0 {
-                    current_pos = param_2 as usize;
-                } else {
-                    current_pos += 3;
-                }
-            }
-            JumpIfFalse6(first_mode, second_mode) => {
-                let param_1 = get_first_param(&proggy, current_pos, first_mode);
-                let param_2 = get_second_param(&proggy, current_pos, second_mode);
-                if param_1 == 0 {
-                    current_pos = param_2 as usize;
-                } else {
-                    current_pos += 3;
-                }
-            }
-            LessThan7(first_mode, second_mode, third_mode) => {
-                let param_1 = get_first_param(&proggy, current_pos, first_mode);
-                let param_2 = get_second_param(&proggy, current_pos, second_mode);
-                let param_3 = get_third_param(&proggy, current_pos, third_mode);
-                proggy[param_3 as usize] = if param_1 < param_2 {
-                    "1".to_owned()
-                } else {
-                    "0".to_owned()
-                };
-                current_pos += 4;
-            }
-            Equals8(first_mode, second_mode, third_mode) => {
-                let param_1 = get_first_param(&proggy, current_pos, first_mode);
-                let param_2 = get_second_param(&proggy, current_pos, second_mode);
-                let param_3 = get_third_param(&proggy, current_pos, third_mode);
-                proggy[param_3 as usize] = if param_1 == param_2 {
-                    "1".to_owned()
-                } else {
-                    "0".to_owned()
-                };
-                current_pos += 4;
-            }
-        }
-    }
-}
-
 fn get_first_param(proggy: &[String], instruction_pos: usize, mode: ParameterMode) -> isize {
     let i = proggy[instruction_pos + 1].parse().unwrap();
     match mode {
@@ -192,39 +114,12 @@ fn get_third_param(proggy: &[String], instruction_pos: usize, mode: ParameterMod
     proggy[instruction_pos + 3].parse().unwrap()
 }
 
-fn generate_all_phase_settings() -> impl Iterator<Item = [u8; 5]> {
-    GenIter(move || {
-        for i in 0..5 {
-            let mut phase_setting = [99, 99, 99, 99, 99];
-            phase_setting[0] = i;
-            for j in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
-                let mut phase_setting = phase_setting.clone();
-                phase_setting[1] = j;
-                for k in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
-                    let mut phase_setting = phase_setting.clone();
-                    phase_setting[2] = k;
-                    for l in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
-                        let mut phase_setting = phase_setting.clone();
-                        phase_setting[3] = l;
-                        for m in (0..5).filter(move |ps| !phase_setting.contains(ps)) {
-                            let mut phase_setting = phase_setting.clone();
-                            phase_setting[4] = m;
-                            yield phase_setting;
-                        }
-                    }
-                }
-            }
-        }
-    })
-}
-
 #[aoc(day7, part1)]
 pub fn solve_part1(input: &str) -> isize {
     let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
 
     // initial input signal is 0
-    println!("{} total phase settings", generate_all_phase_settings().count());
-    generate_all_phase_settings().map(|phase_settings| {
+    (0..5).permutations(5).map(|phase_settings| {
         let mut output_signal = 0;
         for phase_setting in &phase_settings {
             output_signal = run_amplifier(proggy.clone(), *phase_setting, output_signal);
@@ -233,12 +128,165 @@ pub fn solve_part1(input: &str) -> isize {
     }).max().unwrap()
 }
 
+struct IntCodeComputer {
+    proggy: Vec<String>,
+    input: VecDeque<isize>,
+    current_pos: usize,
+}
+
+#[derive(Debug)]
+enum RunResult {
+    NeedMoreInput,
+    Output(isize),
+    Halt,
+}
+
+impl IntCodeComputer {
+    fn new(proggy: Vec<String>) -> Self {
+        IntCodeComputer { proggy, input: VecDeque::new(), current_pos: 0 }
+    }
+
+    fn queue_input(&mut self, input: isize) {
+        self.input.push_front(input);
+    }
+
+    fn run_and_get_next(&mut self) -> RunResult {
+        self.run().next().unwrap()
+    }
+
+    fn run(&mut self) -> impl Iterator<Item = RunResult> + '_ {
+        std::iter::from_fn(move || {
+            loop {
+                let instruction = Instruction::parse(&self.proggy[self.current_pos].to_string());
+                match instruction {
+                    Add1(first_mode, second_mode, third_mode) => {
+                        let param_1 = get_first_param(&self.proggy, self.current_pos, first_mode);
+                        let param_2 = get_second_param(&self.proggy, self.current_pos, second_mode);
+                        let param_3 = get_third_param(&self.proggy, self.current_pos, third_mode);
+                        self.proggy[param_3 as usize] = (param_1 + param_2).to_string();
+                        self.current_pos += 4;
+                    },
+                    Multiply2(first_mode, second_mode, third_mode) => {
+                        let param_1 = get_first_param(&self.proggy, self.current_pos, first_mode);
+                        let param_2 = get_second_param(&self.proggy, self.current_pos, second_mode);
+                        let param_3 = get_third_param(&self.proggy, self.current_pos, third_mode);
+                        self.proggy[param_3 as usize] = (param_1 * param_2).to_string();
+                        self.current_pos += 4;
+                    },
+                    Input3 => {
+                        let position = get_first_param(&self.proggy, self.current_pos, ImmediateMode1) as usize;
+                        match self.input.pop_back() {
+                            Some(input) => {
+                                self.proggy[position] = input.to_string();
+                                self.current_pos += 2;
+                            }
+                            None => return Some(RunResult::NeedMoreInput)
+                        }
+                    },
+                    Output4(mode) => {
+                        let param = get_first_param(&self.proggy, self.current_pos, mode);
+                        self.current_pos += 2;
+                        return Some(RunResult::Output(param))
+                    },
+                    Halt99 => {
+                        return Some(RunResult::Halt);
+                    },
+                    JumpIfTrue5(first_mode, second_mode) => {
+                        let param_1 = get_first_param(&self.proggy, self.current_pos, first_mode);
+                        let param_2 = get_second_param(&self.proggy, self.current_pos, second_mode);
+                        if param_1 != 0 {
+                            self.current_pos = param_2 as usize;
+                        } else {
+                            self.current_pos += 3;
+                        }
+                    }
+                    JumpIfFalse6(first_mode, second_mode) => {
+                        let param_1 = get_first_param(&self.proggy, self.current_pos, first_mode);
+                        let param_2 = get_second_param(&self.proggy, self.current_pos, second_mode);
+                        if param_1 == 0 {
+                            self.current_pos = param_2 as usize;
+                        } else {
+                            self.current_pos += 3;
+                        }
+                    }
+                    LessThan7(first_mode, second_mode, third_mode) => {
+                        let param_1 = get_first_param(&self.proggy, self.current_pos, first_mode);
+                        let param_2 = get_second_param(&self.proggy, self.current_pos, second_mode);
+                        let param_3 = get_third_param(&self.proggy, self.current_pos, third_mode);
+                        self.proggy[param_3 as usize] = if param_1 < param_2 {
+                            "1".to_owned()
+                        } else {
+                            "0".to_owned()
+                        };
+                        self.current_pos += 4;
+                    }
+                    Equals8(first_mode, second_mode, third_mode) => {
+                        let param_1 = get_first_param(&self.proggy, self.current_pos, first_mode);
+                        let param_2 = get_second_param(&self.proggy, self.current_pos, second_mode);
+                        let param_3 = get_third_param(&self.proggy, self.current_pos, third_mode);
+                        self.proggy[param_3 as usize] = if param_1 == param_2 {
+                            "1".to_owned()
+                        } else {
+                            "0".to_owned()
+                        };
+                        self.current_pos += 4;
+                    }
+                }
+
+            }
+        })
+    }
+}
+
+#[aoc(day7, part2)]
+pub fn solve_part2(input: &str) -> isize {
+    let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+
+    (5..=9).permutations(5).map(|phase_settings| {
+        // amplifiers A through E
+        let mut amplifiers = (0..5)
+            .map(|_| IntCodeComputer::new(proggy.clone()))
+            .collect::<Vec<_>>();
+
+        // for feedback loop mode, set the phase setting as the first input instruction
+        for (phase_setting, amplifier) in phase_settings.iter().zip(amplifiers.iter_mut()) {
+            amplifier.queue_input(*phase_setting);
+        }
+
+        let mut output_signal = 0;
+        let mut amplifiers_alive = amplifiers.len();
+        while amplifiers_alive > 0 {
+            for amp in amplifiers.iter_mut() {
+                match amp.run_and_get_next() {
+                    RunResult::NeedMoreInput => {
+                        amp.queue_input(output_signal);
+                        match amp.run_and_get_next() {
+                            RunResult::Output(output) => output_signal = output,
+                            _ => panic!("expected output"),
+                        }
+                    }
+                    RunResult::Halt => {
+                        amplifiers_alive -= 1;
+                    }
+                    _ => panic!("didn't expect this to happen")
+                }
+            }
+        }
+        output_signal
+    }).max().unwrap()
+}
+
 // phase setting can be 0-4
 // returns output signal
 fn run_amplifier(proggy: Vec<String>, phase_setting: u8, input_signal: isize) -> isize {
-    let input = once(phase_setting as isize)
-        .chain(once(input_signal));
-    run_proggy(proggy, input)[0]
+    let mut comp = IntCodeComputer::new(proggy);
+    comp.queue_input(phase_setting as isize);
+    comp.queue_input(input_signal);
+    let mut output = comp.run();
+    match output.next() {
+        Some(RunResult::Output(output)) => output,
+        otherwise => panic!(format!("expected output, but got {:?}", otherwise))
+    }
 }
 
 
@@ -247,4 +295,10 @@ fn p1() {
     assert_eq!(65210, solve_part1("3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0"));
     assert_eq!(54321, solve_part1("3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0"));
     assert_eq!(43210, solve_part1("3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0"));
+}
+
+
+#[test]
+fn p2() {
+    assert_eq!(139629729, solve_part2("3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5"));
 }
