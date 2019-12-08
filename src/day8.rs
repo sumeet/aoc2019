@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use colored::{ColoredString, Colorize};
 
 type Pixel = u8;
 type Row = Vec<Pixel>;
@@ -29,6 +30,48 @@ pub fn solve_part1(input: &str) -> isize {
         }
     }
     num_of_ones * num_of_twos
+}
+
+#[aoc(day8, part2)]
+pub fn solve_part2(input: &str) -> String {
+    let width_px = 25;
+    let height_px = 6;
+    let image = parse_image(input, width_px, height_px);
+
+    // fill layer with all transparent
+    let mut combined_layer = (0..height_px).map(|_| {
+        (0..width_px).map(|_| 2).collect()
+    }).collect::<Layer>();
+
+    for x in 0..width_px {
+        for y in 0..height_px {
+            for layer in layers(&image) {
+                let px = layer[y][x];
+                if px == 0 {
+                    // black
+                    combined_layer[y][x] = 0;
+                    break;
+                } else if px == 1 {
+                    combined_layer[y][x] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    format!("\n{}", combined_layer.iter().map(|row| row.iter().map(|px| color(*px)).join("")).join("\n"))
+}
+
+fn color(px: u8) -> ColoredString {
+    if px == 0 {
+        " ".on_black()
+    } else if px == 1 {
+        " ".on_white()
+    } else if px == 2 {
+        " ".on_blue()
+    } else {
+        panic!("didn't get a valid px value")
+    }
 }
 
 fn parse_image(input: &str, width_px: usize, height_px: usize) -> Image {
