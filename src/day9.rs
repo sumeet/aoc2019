@@ -1,12 +1,14 @@
 use std::collections::VecDeque;
 use crate::day9::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, JumpIfFalse6, LessThan7, Equals8, Halt99, RelativeBaseOffset9};
 use crate::day9::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
+use defaultmap::DefaultHashMap;
+use itertools::Itertools;
 
 #[derive(Debug)]
 enum Instruction {
     Add1(ParameterMode, ParameterMode, ParameterMode),
     Multiply2(ParameterMode, ParameterMode, ParameterMode),
-    Input3,
+    Input3(ParameterMode),
     Output4(ParameterMode),
     JumpIfTrue5(ParameterMode, ParameterMode),
     JumpIfFalse6(ParameterMode, ParameterMode),
@@ -18,6 +20,7 @@ enum Instruction {
 
 impl Instruction {
     fn parse(s: &str) -> Self {
+        println!("{}: ", s);
         let parsed = if s.ends_with("1") {
             let s = format!("{:0>5}", s);
             let third_param_mode = ParameterMode::parse(s.chars().nth(0).unwrap());
@@ -31,7 +34,9 @@ impl Instruction {
             let first_param_mode = ParameterMode::parse(s.chars().nth(2).unwrap());
             Multiply2(first_param_mode, second_param_mode, third_param_mode)
         } else if s.ends_with("3") {
-            Input3
+            let s = format!("{:0>3}", s);
+            let first_param_mode = ParameterMode::parse(s.chars().nth(0).unwrap());
+            Input3(first_param_mode)
         } else if s.ends_with("4") {
             let s = format!("{:0>3}", s);
             let first_param_mode = ParameterMode::parse(s.chars().nth(0).unwrap());
@@ -58,15 +63,16 @@ impl Instruction {
             let second_param_mode = ParameterMode::parse(s.chars().nth(1).unwrap());
             let first_param_mode = ParameterMode::parse(s.chars().nth(2).unwrap());
             Equals8(first_param_mode, second_param_mode, third_param_mode)
+        } else if s == "99" {
+            Halt99
         } else if s.ends_with("9") {
             let s = format!("{:0>3}", s);
             let first_param_mode = ParameterMode::parse(s.chars().nth(0).unwrap());
             RelativeBaseOffset9(first_param_mode)
-        } else if s == "99" {
-            Halt99
         } else {
             panic!(format!("unable to parse instruction {}", s))
         };
+        println!("{:?}", parsed);
         parsed
     }
 }
@@ -89,7 +95,7 @@ impl ParameterMode {
     }
 }
 
-fn get_first_param(proggy: &[String], instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
+fn get_first_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
     let i = proggy[instruction_pos + 1].parse().unwrap();
     match mode {
         PositionMode0 => {
@@ -99,12 +105,12 @@ fn get_first_param(proggy: &[String], instruction_pos: usize, mode: ParameterMod
             i
         },
         RelativeMode2 => {
-            proggy[i as usize].parse::<i128>().unwrap() + relative_base
+            proggy[(i + relative_base) as usize].parse::<i128>().unwrap()
         }
     }
 }
 
-fn get_second_param(proggy: &[String], instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
+fn get_second_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
     let i = proggy[instruction_pos + 2].parse().unwrap();
     match mode {
         PositionMode0 => {
@@ -114,20 +120,22 @@ fn get_second_param(proggy: &[String], instruction_pos: usize, mode: ParameterMo
             i
         },
         RelativeMode2 => {
-            proggy[i as usize].parse::<i128>().unwrap() + relative_base
+            proggy[(i + relative_base) as usize].parse::<i128>().unwrap()
         }
     }
 }
 
-fn get_third_param(proggy: &[String], instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
+fn get_third_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
     if let ParameterMode::ImmediateMode1 = mode {
         panic!("invalid program, third param can't be immediate mode")
     }
     proggy[instruction_pos + 3].parse().unwrap()
 }
 
+type Proggy = DefaultHashMap<usize, String>;
+
 struct IntCodeComputer {
-    proggy: Vec<String>,
+    proggy: Proggy,
     input: VecDeque<i128>,
     current_pos: usize,
     relative_base: i128,
@@ -142,11 +150,25 @@ enum RunResult {
 
 impl IntCodeComputer {
     fn new(proggy: Vec<String>) -> Self {
+        let proggy = DefaultHashMap::new_with_map(
+            "0".to_owned(), proggy.into_iter().enumerate().collect());
         IntCodeComputer { proggy, input: VecDeque::new(), current_pos: 0, relative_base: 0 }
     }
 
     fn queue_input(&mut self, input: i128) {
         self.input.push_front(input);
+    }
+
+    fn run_until_halt(&mut self) -> Vec<i128> {
+        let mut all_output = vec![];
+        loop {
+            match self.run_and_get_next() {
+                RunResult::Output(output) => all_output.push(output),
+                RunResult::Halt => break,
+                otherwise => panic!("didn't expect non-output, but got {:?}", otherwise),
+            }
+        }
+        all_output
     }
 
     fn run_and_get_next(&mut self) -> RunResult {
@@ -184,8 +206,8 @@ impl IntCodeComputer {
                         self.proggy[param_3 as usize] = (param_1 * param_2).to_string();
                         self.current_pos += 4;
                     },
-                    Input3 => {
-                        let position = self.get_first_param(ImmediateMode1) as usize;
+                    Input3(mode) => {
+                        let position = self.get_first_param(mode) as usize;
                         match self.input.pop_back() {
                             Some(input) => {
                                 self.proggy[position] = input.to_string();
@@ -197,6 +219,7 @@ impl IntCodeComputer {
                     Output4(mode) => {
                         let param = self.get_first_param(mode);
                         self.current_pos += 2;
+//                        println!("{}", param);
                         return Some(RunResult::Output(param))
                     },
                     Halt99 => {
@@ -255,15 +278,15 @@ impl IntCodeComputer {
 }
 
 #[aoc(day9, part1)]
-pub fn solve_part1(input: &str) -> i128 {
+pub fn solve_part1(input: &str) -> String {
     let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
-    match icc.run_and_get_next() {
-        RunResult::Output(output) => output,
-        otherwise=> panic!("got {:?} but wanted output", otherwise)
-    }
+    icc.queue_input(1);
+    icc.run_until_halt().iter().join(",")
 }
 #[test]
 fn p1() {
-    println!("{:?}", solve_part1("109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99"))
+    assert_eq!("109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99", solve_part1("109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99"));
+    assert_eq!("1219070632396864", solve_part1("1102,34915192,34915192,7,4,7,99,0"));
+    assert_eq!("1125899906842624", solve_part1("104,1125899906842624,99"))
 }
