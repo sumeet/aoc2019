@@ -1,10 +1,8 @@
 use num_rational::Ratio;
-use defaultmap::DefaultHashMap;
 use itertools::Itertools;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 enum Slope {
-    Value(Ratio<isize>),
     UpLeft(Ratio<isize>),
     UpRight(Ratio<isize>),
     DownLeft(Ratio<isize>),
