@@ -20,7 +20,6 @@ enum Instruction {
 
 impl Instruction {
     fn parse(s: &str) -> Self {
-        println!("{}: ", s);
         let parsed = if s.ends_with("1") {
             let s = format!("{:0>5}", s);
             let third_param_mode = ParameterMode::parse(s.chars().nth(0).unwrap());
@@ -72,7 +71,6 @@ impl Instruction {
         } else {
             panic!(format!("unable to parse instruction {}", s))
         };
-        println!("{:?}", parsed);
         parsed
     }
 }
@@ -126,10 +124,17 @@ fn get_second_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode
 }
 
 fn get_third_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
-    if let ParameterMode::ImmediateMode1 = mode {
-        panic!("invalid program, third param can't be immediate mode")
+    match mode {
+        PositionMode0 => {
+            proggy[instruction_pos + 3].parse().unwrap()
+        },
+        ImmediateMode1 => {
+            panic!("invalid program, third param can't be immediate mode")
+        },
+        RelativeMode2 => {
+            proggy[instruction_pos + 3].parse::<i128>().unwrap() + relative_base
+        }
     }
-    proggy[instruction_pos + 3].parse().unwrap()
 }
 
 type Proggy = DefaultHashMap<usize, String>;
@@ -175,6 +180,15 @@ impl IntCodeComputer {
         self.run().next().unwrap()
     }
 
+    fn get_input_param(&self, mode: ParameterMode) -> usize {
+        let pos = self.get_first_param(ImmediateMode1);
+        match mode {
+            PositionMode0 => pos as usize,
+            ImmediateMode1 => panic!("inputs not allowed to be in immediate mode"),
+            RelativeMode2 => (pos + self.relative_base) as usize,
+        }
+    }
+
     fn get_first_param(&self, mode: ParameterMode) -> i128 {
         get_first_param(&self.proggy, self.current_pos, mode, self.relative_base)
     }
@@ -207,10 +221,10 @@ impl IntCodeComputer {
                         self.current_pos += 4;
                     },
                     Input3(mode) => {
-                        let position = self.get_first_param(mode) as usize;
+                        let raw_position = self.get_input_param(mode);
                         match self.input.pop_back() {
                             Some(input) => {
-                                self.proggy[position] = input.to_string();
+                                self.proggy[raw_position] = input.to_string();
                                 self.current_pos += 2;
                             }
                             None => return Some(RunResult::NeedMoreInput)
@@ -219,7 +233,6 @@ impl IntCodeComputer {
                     Output4(mode) => {
                         let param = self.get_first_param(mode);
                         self.current_pos += 2;
-//                        println!("{}", param);
                         return Some(RunResult::Output(param))
                     },
                     Halt99 => {
@@ -284,6 +297,15 @@ pub fn solve_part1(input: &str) -> String {
     icc.queue_input(1);
     icc.run_until_halt().iter().join(",")
 }
+
+#[aoc(day9, part2)]
+pub fn solve_part2(input: &str) -> String {
+    let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+    let mut icc = IntCodeComputer::new(proggy);
+    icc.queue_input(2);
+    icc.run_until_halt().iter().join(",")
+}
+
 #[test]
 fn p1() {
     assert_eq!("109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99", solve_part1("109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99"));
