@@ -4,6 +4,8 @@ use crate::day13::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
 use std::iter::once;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[derive(Debug)]
 enum Instruction {
@@ -382,6 +384,8 @@ fn solve_part2(input: &str) -> usize {
         println!("{}", draw_screen(&screen));
         match run_result {
             RunResult::NeedMoreInput => {
+                // sleep between each move so you can see what's going on
+                sleep(Duration::from_millis(5));
                 icc.queue_input(player.get_next_move(&screen));
             }
             RunResult::Halt => break,
@@ -447,11 +451,11 @@ impl GamePlayer {
 
 
 fn position_of_paddle(screen :&Screen) -> (usize, usize) {
-    let pos = screen.tiles.iter().filter(|(pos, item)| **item == 3).next().unwrap().0;
+    let pos = screen.tiles.iter().filter(|(_pos, item)| **item == 3).next().unwrap().0;
     ((pos.0 as usize), pos.1)
 }
 
 fn position_of_ball(screen :&Screen) -> (usize, usize) {
-    let pos = screen.tiles.iter().filter(|(pos, item)| **item == 4).next().unwrap().0;
+    let pos = screen.tiles.iter().filter(|(_pos, item)| **item == 4).next().unwrap().0;
     ((pos.0 as usize), pos.1)
 }
