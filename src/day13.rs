@@ -4,7 +4,6 @@ use crate::day13::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
 use std::iter::once;
-use text_io::{read,try_read,try_scan};
 
 #[derive(Debug)]
 enum Instruction {
@@ -374,6 +373,7 @@ fn solve_part2(input: &str) -> usize {
     proggy[0] = "2".to_string();
     let mut icc = IntCodeComputer::new(proggy);
     let mut screen = Screen::new();
+    let mut player = GamePlayer::new();
     loop {
         let (output, run_result) = icc.run_and_collect_all_output();
         let tiles = output.iter().tuples()
@@ -382,11 +382,76 @@ fn solve_part2(input: &str) -> usize {
         println!("{}", draw_screen(&screen));
         match run_result {
             RunResult::NeedMoreInput => {
-                icc.queue_input(read!("{}"));
+                icc.queue_input(player.get_next_move(&screen));
             }
             RunResult::Halt => break,
             _ => panic!("this should never happen"),
         }
     }
     123
+}
+
+struct GamePlayer {
+    previous_ball_x: Option<usize>,
+}
+
+impl GamePlayer {
+    fn new() -> Self {
+        Self { previous_ball_x: None }
+    }
+
+    // returns paddle movement in intcode input form:
+    // -1 => move to the left
+    // 1 => move to the right
+    // 0 => stay
+    fn get_next_move(&mut self, screen: &Screen) -> i128 {
+        let current_ball_x = position_of_ball(&screen).0;
+        let previous_ball_x = self.previous_ball_x.replace(current_ball_x);
+        let paddle_x = position_of_paddle(screen).0;
+        match previous_ball_x {
+            None => 0,
+            Some(previous_ball_x) => {
+                if previous_ball_x == current_ball_x {
+                    panic!("i don't think the ball ever goes straight up and down")
+                } else if previous_ball_x < current_ball_x {   // if the ball is moving to the right
+                    if current_ball_x == paddle_x { // ...and the ball is directly on top of the paddle
+                        1 // then move to the right to follow it
+                    } else if current_ball_x + 1 == current_ball_x { //... and the ball will be on top of the paddle next turn
+                        0 // then stay in the same place and let the ball go on top of the paddle
+                    } else if paddle_x < current_ball_x { // ...and the ball is to the right of the paddle
+                        1 // then move to the right to follow, and pray, because we probably won't be able to catch it
+                    } else if paddle_x > current_ball_x {  // ...and the ball is to the left of the paddle
+                        -1 // then move to the left to follow, and pray that we'll be able to catch it
+                    } else {
+                        panic!("shouldn't have gotten here")
+                    }
+                } else if previous_ball_x > current_ball_x {  // if the ball is moving to the left
+                    if current_ball_x == paddle_x { // ...and the ball is directly on top of the paddle
+                        -1 // then move to the left to follow it
+                    } else if current_ball_x - 1 == current_ball_x { //... and the ball will be on top of the paddle next turn
+                        0 // then stay in the same place and let the ball go on top of the paddle
+                    } else if paddle_x < current_ball_x { // ...and the ball is to the right of the paddle
+                        1 // then move to the right to follow, and pray, because we probably won't be able to catch it
+                    } else if paddle_x > current_ball_x {  // ...and the ball is to the left of the paddle
+                        -1 // then move to the left to follow, and pray that we'll be able to catch it
+                    } else {
+                        panic!("shouldn't have gotten here")
+                    }
+                } else {
+                    panic!("shouldn't have gotten here")
+                }
+            }
+        }
+    }
+}
+
+
+fn position_of_paddle(screen :&Screen) -> (usize, usize) {
+    let pos = screen.tiles.iter().filter(|(pos, item)| **item == 3).next().unwrap().0;
+    ((pos.0 as usize), pos.1)
+}
+
+fn position_of_ball(screen :&Screen) -> (usize, usize) {
+    let pos = screen.tiles.iter().filter(|(pos, item)| **item == 4).next().unwrap().0;
+    ((pos.0 as usize), pos.1)
 }
