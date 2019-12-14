@@ -15,7 +15,7 @@ fn solve_part1(input: &str) -> usize {
         let output_str = output_str.trim();
         let (parts_str, chemical_str) = output_str.split(" ").collect_tuple().unwrap();
         let output = ReactionPart::new(parts_str.parse().unwrap(), chemical_str.into());
-        (output.chemical.clone(), Reaction::new(inputs.collect(), output))
+        (output.chemical, Reaction::new(inputs.collect(), output))
     }).collect();
     let mut waste = Waste::new();
     num_ore_required(&ReactionPart::new(1, "FUEL".into()),
@@ -36,34 +36,34 @@ fn num_ore_required(target: &ReactionPart, reactions_list: &ReactionsList, waste
     let wasted_parts = (num_reactions * reaction.output.parts) - num_parts_needed;
     waste.add(target.chemical.to_string(), wasted_parts);
     reaction.inputs.iter().map(|input| {
-        let input = ReactionPart::new(input.parts * num_reactions, input.chemical.clone());
+        let input = ReactionPart::new(input.parts * num_reactions, input.chemical);
         num_ore_required(&input, reactions_list, waste)
     }).sum()
 }
 
 // keyed by output
-type ReactionsList = HashMap<String, Reaction>;
+type ReactionsList<'a> = HashMap<&'a str, Reaction<'a>>;
 
 #[derive(Debug)]
-struct ReactionPart {
+struct ReactionPart<'a> {
     parts: usize,
-    chemical: String,
+    chemical: &'a str,
 }
 
-impl ReactionPart {
-    fn new(parts: usize, chemical: String) -> Self {
+impl<'a> ReactionPart<'a> {
+    fn new(parts: usize, chemical: &'a str) -> Self {
         Self { parts, chemical }
     }
 }
 
 #[derive(Debug)]
-struct Reaction {
-    inputs: Vec<ReactionPart>,
-    output: ReactionPart,
+struct Reaction<'a> {
+    inputs: Vec<ReactionPart<'a>>,
+    output: ReactionPart<'a>,
 }
 
-impl Reaction {
-    pub fn new(inputs: Vec<ReactionPart>, output: ReactionPart) -> Self {
+impl<'a> Reaction<'a> {
+    pub fn new(inputs: Vec<ReactionPart<'a>>, output: ReactionPart<'a>) -> Self {
         Self { inputs, output }
     }
 }
