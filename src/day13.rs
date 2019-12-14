@@ -3,6 +3,8 @@ use crate::day13::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, J
 use crate::day13::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
+use std::iter::once;
+use text_io::{read,try_read,try_scan};
 
 #[derive(Debug)]
 enum Instruction {
@@ -177,6 +179,19 @@ impl IntCodeComputer {
         all_output
     }
 
+    fn run_and_collect_all_output(&mut self) -> (Vec<i128>, RunResult) {
+        let mut all_output = vec![];
+        let mut result;
+        loop {
+            result = self.run_and_get_next();
+            match result {
+                RunResult::Output(output) => all_output.push(output),
+                RunResult::NeedMoreInput | RunResult::Halt => break,
+            }
+        }
+        (all_output, result)
+    }
+
     fn run_and_get_next(&mut self) -> RunResult {
         self.run().next().unwrap()
     }
@@ -291,10 +306,10 @@ impl IntCodeComputer {
     }
 }
 
-type ScreenLocation = (usize, usize);
-type Tile = u8;
+type ScreenLocation = (isize, usize);
+type Tile = usize;
 
-fn draw_tile(tile: Tile) -> &str {
+fn draw_tile(tile: Tile) -> &'static str {
     match tile {
         0 => " ", // empty
         1 => "|", // wall
@@ -310,9 +325,37 @@ struct Screen {
 }
 
 impl Screen {
-    fn new(tiles: HashMap<ScreenLocation, Tile>) -> Self {
-        Self { tiles }
+    fn new() -> Self {
+        Self { tiles: HashMap::new() }
     }
+
+    fn update(&mut self, tiles: HashMap<ScreenLocation, Tile>) {
+        self.tiles.extend(tiles);
+    }
+
+    // returns a list of rows of tiles
+    fn tiles(&self) -> Vec<Vec<Tile>> {
+        let maxx = self.tiles.iter().map(|((x, _y), _pos)| *x).max().unwrap();
+        let maxy = self.tiles.iter().map(|((_x, y), _pos)| *y).max().unwrap();
+        (0..=maxy).map(|y| {
+            (0..=maxx).map(|x| {
+                *(self.tiles.get(&(x, y)))
+                    .ok_or_else(|| format!("couldn't find {},{}, screen is {:?}", x, y, self.tiles))
+                    .unwrap()
+            }).collect()
+        }).collect()
+    }
+
+    fn score(&self) -> Option<usize> {
+        self.tiles.get(&(-1, 0)).map(|score| *score)
+    }
+}
+
+fn draw_screen(screen: &Screen) -> String {
+    screen.tiles().iter().map(|row| {
+        row.iter().map(|tile| draw_tile(*tile)).join("")
+    }).chain(once(format!("score: {:?}", screen.score())))
+      .join("\n")
 }
 
 #[aoc(day13, part1)]
@@ -320,6 +363,30 @@ fn solve_part1(input: &str) -> usize {
     let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
     let tiles = icc.run_until_halt().iter().tuples()
-        .map(|(x, y, tile_id)| ((*x as usize, *y as usize), *tile_id as u8)).collect::<HashMap<_, _>>();
+        .map(|(x, y, tile_id)| ((*x as isize, *y as usize), *tile_id as usize)).collect::<HashMap<_, _>>();
     tiles.iter().filter(|(_pos, tile_id)| **tile_id == 2).count()
+}
+
+#[aoc(day13, part2)]
+fn solve_part2(input: &str) -> usize {
+    let mut proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+    // set memory address 0 to 2 for free play
+    proggy[0] = "2".to_string();
+    let mut icc = IntCodeComputer::new(proggy);
+    let mut screen = Screen::new();
+    loop {
+        let (output, run_result) = icc.run_and_collect_all_output();
+        let tiles = output.iter().tuples()
+            .map(|(x, y, tile_id)| ((*x as isize, *y as usize), *tile_id as Tile)).collect();
+        screen.update(tiles);
+        println!("{}", draw_screen(&screen));
+        match run_result {
+            RunResult::NeedMoreInput => {
+                icc.queue_input(read!("{}"));
+            }
+            RunResult::Halt => break,
+            _ => panic!("this should never happen"),
+        }
+    }
+    123
 }
