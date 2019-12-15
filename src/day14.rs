@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use itertools::Itertools;
 use defaultmap::DefaultHashMap;
-use std::cmp::min;
+use std::cmp::{min, Ordering};
 
 #[aoc(day14, part1)]
 fn solve_part1(input: &str) -> usize {
@@ -21,6 +21,83 @@ fn solve_part1(input: &str) -> usize {
     num_ore_required(&ReactionPart::new(1, "FUEL".into()),
         &reaction_by_output,
         &mut waste)
+}
+
+#[aoc(day14, part2)]
+fn solve_part2(input: &str) -> usize {
+    let reaction_by_output = input.trim().lines().map(|line| {
+        let (inputs_str, output_str) = line.split("=>").collect_tuple().unwrap();
+        let inputs = inputs_str.trim().split(",").map(|input_str| {
+            let input_str = input_str.trim();
+            let (parts_str, chemical_str) = input_str.split(" ").collect_tuple().unwrap();
+            ReactionPart::new(parts_str.parse().unwrap(), chemical_str.into())
+        });
+        let output_str = output_str.trim();
+        let (parts_str, chemical_str) = output_str.split(" ").collect_tuple().unwrap();
+        let output = ReactionPart::new(parts_str.parse().unwrap(), chemical_str.into());
+        (output.chemical, Reaction::new(inputs.collect(), output))
+    }).collect();
+
+    // let's find the neighborhood of this value
+    let amt_ore_in_inventory = 1000000000000;
+    let mut prev_amt_fuel_made = 0;
+    let mut amt_fuel_made = 1;
+    let mut amt_ore_used;
+    loop {
+        amt_ore_used = num_ore_required(
+            &ReactionPart::new(amt_fuel_made, "FUEL".into()),
+            &reaction_by_output, &mut Waste::new());
+        if amt_ore_used > amt_ore_in_inventory {
+            break
+        } else {
+            prev_amt_fuel_made = amt_fuel_made;
+            amt_fuel_made *= 10;
+        }
+    };
+
+    let result = binary_search(prev_amt_fuel_made, amt_fuel_made, |amt_fuel_made| {
+        let num_ore_required_low = num_ore_required(
+            &ReactionPart::new(amt_fuel_made, "FUEL".into()),
+            &reaction_by_output, &mut Waste::new());
+        let num_ore_required_next = num_ore_required(
+            &ReactionPart::new(amt_fuel_made + 1, "FUEL".into()),
+            &reaction_by_output, &mut Waste::new());
+        (num_ore_required_low, num_ore_required_next)
+    }, |(num_ore_required, num_ore_required_next)| {
+        let (num_ore_required, num_ore_required_next) = (*num_ore_required, *num_ore_required_next);
+        if num_ore_required < amt_ore_in_inventory && num_ore_required_next < amt_ore_in_inventory {
+            Ordering::Greater
+        } else if num_ore_required <= amt_ore_in_inventory && num_ore_required_next >= amt_ore_in_inventory {
+            Ordering::Equal
+        } else {
+            Ordering::Less
+        }
+    });
+    result.unwrap().0
+}
+
+//badboy from https://github.com/ThomasZumsteg/exercism-rust/blob/master/binary-search/src/lib.rs
+fn binary_search<T>(low: usize, high: usize, get: impl Fn(usize) -> T, test: impl Fn(&T) -> Ordering) -> Option<(usize, T)> {
+    let (mut start, mut end) = (low, high);
+    while start <= end {
+        let middle = (end + start) / 2;
+        if high <= middle {
+            return None
+        }
+        let val = get(middle);
+        match test(&val) {
+            Ordering::Less => {
+                if middle <= 0 {
+                    return None
+                } else {
+                    end = middle - 1;
+                }
+            },
+            Ordering::Greater => start = middle + 1,
+            Ordering::Equal => return Some((middle, val)),
+        }
+    }
+    None
 }
 
 fn num_ore_required(target: &ReactionPart, reactions_list: &ReactionsList, waste: &mut Waste) -> usize {
@@ -114,6 +191,15 @@ fn p1_b() {
 #[test]
 fn p1_c() {
     assert_eq!(solve_part1("157 ORE => 5 NZVS
+165 ORE => 6 DCFZ
+44 XJWVT, 5 KHKGT, 1 QDVJ, 29 NZVS, 9 GPVTF, 48 HKGWZ => 1 FUEL
+12 HKGWZ, 1 GPVTF, 8 PSHF => 9 QDVJ
+179 ORE => 7 PSHF
+177 ORE => 5 HKGWZ
+7 DCFZ, 7 PSHF => 2 XJWVT
+165 ORE => 2 GPVTF
+3 DCFZ, 7 NZVS, 5 HKGWZ, 10 PSHF => 8 KHKGT"), 13312);
+    assert_eq!(solve_part2("157 ORE => 5 NZVS
 165 ORE => 6 DCFZ
 44 XJWVT, 5 KHKGT, 1 QDVJ, 29 NZVS, 9 GPVTF, 48 HKGWZ => 1 FUEL
 12 HKGWZ, 1 GPVTF, 8 PSHF => 9 QDVJ
