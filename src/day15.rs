@@ -447,6 +447,26 @@ fn min_num_steps_to_oxygen(start: Position, map: &Map, mut visited: HashSet<Posi
     }
 }
 
+// we'll double purpose here OxygenSystem as meaning Oxygen has spread to that empty tile
+fn oxygen_containing_nodes(map: &Map) -> impl Iterator<Item = Position> + '_ {
+    map.iter().filter_map(|(position, tile_state)| {
+        if let TileState::OxygenSystem = tile_state {
+            return Some(*position)
+        } else {
+            return None
+        }
+    })
+}
+
+fn contains_empty_tiles(map: &Map) -> bool {
+    map.iter().any(|(position, tile_state)| {
+        if let TileState::Empty = tile_state {
+            true
+        } else {
+            false
+        }
+    })
+}
 
 #[aoc(day15, part1)]
 fn solve_part1(input: &str) -> usize {
@@ -459,3 +479,26 @@ fn solve_part1(input: &str) -> usize {
     min_num_steps_to_oxygen((0, 0), &map, HashSet::new()).unwrap()
 }
 
+#[aoc(day15, part2)]
+fn solve_part2(input: &str) -> usize {
+    let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+    let icc = IntCodeComputer::new(proggy);
+    let robot = Robot::new(icc);;
+    let mut map = new_map();
+    explore_around(&mut map, (0, 0), robot);
+    for i in 0.. {
+        if !contains_empty_tiles(&map) {
+            return i
+        }
+        let surroundings = oxygen_containing_nodes(&map).collect_vec();
+        for pos in surroundings {
+            for (direction, tile_state) in &get_mapped_surroundings(&map, &pos) {
+                if let TileState::Empty = tile_state {
+                   let pos_to_oxygenate = from(&pos, *direction);
+                   map[pos_to_oxygenate] = TileState::OxygenSystem
+                }
+            }
+        }
+    }
+    unreachable!()
+}
