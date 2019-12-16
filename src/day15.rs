@@ -1,4 +1,4 @@
-use std::collections::{VecDeque};
+use std::collections::{VecDeque, HashSet};
 use crate::day15::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, JumpIfFalse6, LessThan7, Equals8, Halt99, RelativeBaseOffset9};
 use crate::day15::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
@@ -352,6 +352,7 @@ fn new_map() -> Map {
     map
 }
 
+#[allow(unused)]
 fn render_map(map: &Map) -> String {
     let (minx, maxx) = map.keys().map(|pos| pos.0).minmax().into_option().unwrap();
     let (miny, maxy) = map.keys().map(|pos| pos.1).minmax().into_option().unwrap();
@@ -424,13 +425,37 @@ fn explore_around(map: &mut Map, current_pos: Position, robot: Robot) {
     }
 }
 
+fn min_num_steps_to_oxygen(start: Position, map: &Map, mut visited: HashSet<Position>) -> Option<usize> {
+    match map[&start] {
+        TileState::Unknown | TileState::Wall => {
+            // nowhere to go from here
+            None
+        },
+        TileState::Empty => {
+            get_mapped_surroundings(map, &start).iter()
+                .filter_map(|(direction, _ts)| {
+                    let next_pos = from(&start, *direction);
+                    if visited.contains(&next_pos) {
+                        return None
+                    }
+                    visited.insert(start);
+                    min_num_steps_to_oxygen(next_pos, map, visited.clone())
+                        .map(|num_steps| num_steps + 1)
+                }).min()
+        },
+        TileState::OxygenSystem => Some(0),
+    }
+}
+
+
 #[aoc(day15, part1)]
-fn solve_part1(input: &str) -> String {
+fn solve_part1(input: &str) -> usize {
     let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let icc = IntCodeComputer::new(proggy);
     let robot = Robot::new(icc);;
     let mut map = new_map();
     explore_around(&mut map, (0, 0), robot);
-    format!("\n{}", render_map(&map))
+    //println!("\n{}", render_map(&map));
+    min_num_steps_to_oxygen((0, 0), &map, HashSet::new()).unwrap()
 }
 
