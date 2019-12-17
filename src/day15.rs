@@ -459,7 +459,7 @@ fn oxygen_containing_nodes(map: &Map) -> impl Iterator<Item = Position> + '_ {
 }
 
 fn contains_empty_tiles(map: &Map) -> bool {
-    map.iter().any(|(position, tile_state)| {
+    map.iter().any(|(_position, tile_state)| {
         if let TileState::Empty = tile_state {
             true
         } else {
