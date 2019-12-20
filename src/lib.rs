@@ -1,5 +1,6 @@
 #![feature(is_sorted)]
 #![feature(generators)]
+#![feature(atomic_min_max)]
 extern crate aoc_runner;
 
 #[macro_use]

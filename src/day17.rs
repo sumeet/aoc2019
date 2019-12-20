@@ -3,6 +3,10 @@ use crate::day17::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, J
 use crate::day17::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
+use std::iter::once;
+use rayon::prelude::{IntoParallelIterator,ParallelIterator};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]
 enum Instruction {
@@ -161,6 +165,7 @@ impl IntCodeComputer {
         IntCodeComputer { proggy, input: VecDeque::new(), current_pos: 0, relative_base: 0 }
     }
 
+    #[allow(unused)]
     fn queue_input(&mut self, input: i128) {
         self.input.push_front(input);
     }
@@ -341,6 +346,11 @@ fn cells_needed_for_intersect(pos: (usize, usize), map: &Map) -> Option<Vec<char
     points.iter().map(|point| Some(*map.rows.get(point.1)?.get(point.0)?)).collect()
 }
 
+fn checked_add_pos(pos: (usize, usize), dxdy: (isize, isize)) -> Option<(usize, usize)> {
+    let (dx, dy) = dxdy;
+    Some((checked_add(pos.0, dx)?, checked_add(pos.1, dy)?))
+}
+
 fn checked_add(u: usize, i: isize) -> Option<usize> {
     if i < 0 {
         u.checked_sub(i.abs() as usize)
@@ -355,6 +365,7 @@ fn solve_part1(input: &str) -> usize {
     let mut icc = IntCodeComputer::new(proggy);
     let output = icc.run_until_halt();
     let map_str = output.iter().map(|o| char::from(*o as u8)).collect();
+    println!("{}", map_str);
     let map = parse_map(map_str);
     map.points().filter(|point| {
         if let Some(cells) = cells_needed_for_intersect(*point, &map) {
@@ -365,7 +376,7 @@ fn solve_part1(input: &str) -> usize {
     }).map(|(x, y)| x * y).sum()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Direction {
     Up,
     Down,
@@ -373,13 +384,60 @@ enum Direction {
     Right,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+struct MoveWithGoodies {
+    cmd: Move,
+    previously_unseen_locations: HashSet<(usize, usize)>,
+    next_pos: (usize, usize),
+}
+
+impl MoveWithGoodies {
+    fn left(current_pos: (usize, usize)) -> Self {
+        MoveWithGoodies {
+            cmd: Move::TurnLeft,
+            previously_unseen_locations: HashSet::new(),
+            next_pos: current_pos,
+        }
+    }
+
+    fn right(current_pos: (usize, usize)) -> Self {
+        MoveWithGoodies {
+            cmd: Move::TurnRight,
+            previously_unseen_locations: HashSet::new(),
+            next_pos: current_pos,
+        }
+    }
+
+    fn forward(n: usize, previously_unseen_locations: HashSet<(usize, usize)>,
+               next_pos: (usize, usize)) -> Self {
+        MoveWithGoodies {
+            cmd: Move::Forward(n),
+            previously_unseen_locations,
+            next_pos
+        }
+    }
+
+    fn num_previously_unseen_locations(&self) -> usize {
+        self.previously_unseen_locations.len()
+    }
+}
+
+#[derive(Debug, Clone)]
+enum Move {
+    TurnLeft,
+    TurnRight,
+    Forward(usize),
+}
+
+#[derive(Debug, Clone)]
 struct Solver {
+    // TODO: this can be minimized to number of characters later
+    shortest_complete_path: Arc<AtomicUsize>,
     scaffold_locations: HashSet<(usize, usize)>,
     current_pos: (usize, usize),
     facing: Direction,
-    visited_locations: HashSet<(usize, usize)>,
     unvisited_locations: HashSet<(usize, usize)>,
+    all_moves_so_far: Vec<Move>,
 }
 
 impl Solver {
@@ -428,16 +486,108 @@ impl Solver {
         let unvisited_locations = scaffold_locations.clone();
         // append the current pos to scaffold locations, we're just already there
         scaffold_locations.insert(current_pos);
-        // and also we've already visited the current position as well
-        let mut visited_locations = HashSet::new();
-        visited_locations.insert(current_pos);
 
         Self {
             scaffold_locations,
             current_pos,
             facing,
-            visited_locations,
             unvisited_locations,
+            all_moves_so_far: vec![],
+            // if anything finishes, hopefully it's smaller than this lol
+            shortest_complete_path: Arc::new(AtomicUsize::new(99999)),
+        }
+    }
+
+    fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self>  {
+        let num_moves_so_far = self.all_moves_so_far.len();
+        println!("num moves so far: {}", num_moves_so_far);
+
+        if self.shortest_complete_path.load(Ordering::SeqCst) < num_moves_so_far {
+            return None
+        }
+
+        if self.is_complete() {
+            if num_moves_so_far < self.shortest_complete_path.fetch_min(num_moves_so_far, Ordering::SeqCst) {
+                return Some(self.clone())
+            } else {
+                return None
+            }
+        }
+
+        self.most_effective_possible_moves_from_current_position().into_par_iter()
+            .map(|move_with_goodies| {
+                self.go(&move_with_goodies).shortest_path_touching_everything_at_least_once()
+            }).while_some().min_by_key(|solver| solver.all_moves_so_far.len())
+    }
+
+    fn is_complete(&self) -> bool {
+        self.unvisited_locations.is_empty()
+    }
+
+    fn go(&self, m: &MoveWithGoodies) -> Self {
+        println!("start of go, hit {} spots previously", m.previously_unseen_locations.len());
+        let mut next = self.clone();
+        next.current_pos = m.next_pos;
+        next.unvisited_locations = self.unvisited_locations
+            .difference(&m.previously_unseen_locations).cloned().collect();
+        next.facing = match m.cmd {
+            Move::Forward(_) => next.facing.clone(),
+            Move::TurnLeft => match self.facing {
+                Direction::Up => Direction::Left,
+                Direction::Down => Direction::Right,
+                Direction::Left => Direction::Down,
+                Direction::Right => Direction::Up,
+            },
+            Move::TurnRight => match self.facing {
+                Direction::Up => Direction::Right,
+                Direction::Down => Direction::Left,
+                Direction::Left => Direction::Up,
+                Direction::Right => Direction::Down,
+            }
+        };
+        next.all_moves_so_far.push(m.cmd.clone());
+        next
+    }
+
+    fn most_effective_possible_moves_from_current_position(&self) -> Vec<MoveWithGoodies> {
+        let (d1x, d1y) = self.d1xd1y();
+        let mut previously_unseen_locations = HashSet::new();
+
+        // can always turn left and right
+        let mut moves = once(MoveWithGoodies::left(self.current_pos))
+            .chain(once(MoveWithGoodies::right(self.current_pos))).chain(
+            (1..).into_iter().map(move |i| {
+                let dxdy = (d1x * i, d1y * i);
+                let next_pos = checked_add_pos(self.current_pos, dxdy)?;
+                println!("starting_pos: {:?}, facing: {:?}, next pos: {:?}", self.current_pos, self.facing, next_pos);
+                if !self.scaffold_locations.contains(&next_pos) {
+                    return None
+                } else {
+
+                }
+
+                println!("unvisited_locations: {:?}", self.unvisited_locations);
+                if self.unvisited_locations.contains(&next_pos) {
+                    previously_unseen_locations.insert(next_pos);
+                }
+                Some(
+                    MoveWithGoodies::forward(i as usize,
+                                             previously_unseen_locations.clone(),
+                                             next_pos))
+            }).while_some()).collect_vec();
+        moves.sort_by_key(|move_with_goodies| {
+            // sort in descending order
+            -1 * move_with_goodies.num_previously_unseen_locations() as isize
+        });
+        moves
+    }
+
+    fn d1xd1y(&self) -> (isize, isize) {
+        match self.facing {
+            Direction::Up => (0, 1),
+            Direction::Down => (0, -1),
+            Direction::Left => (-1, 0),
+            Direction::Right => (1, 0),
         }
     }
 }
@@ -451,13 +601,18 @@ fn solve_part2(input: &str) -> String {
     let map_str = output.iter().map(|o| char::from(*o as u8)).collect();
     let map = parse_map(map_str);
     let solver = Solver::from_map(&map);
+    println!("{:?}", solver);
+
+    println!("{:?}", solver.most_effective_possible_moves_from_current_position());
+
+    solver.shortest_path_touching_everything_at_least_once();
 
     // ok now begin part 2
     let mut proggy = input.split(",").map(|s| s.to_owned()).collect_vec();
     // make the robot wake up by changing the first instruction from a 1 to 2
     assert_eq!(proggy[0], "1");
     proggy[0] = "2".into();
-    let mut icc = IntCodeComputer::new(proggy);
+    let _icc = IntCodeComputer::new(proggy);
 
     format!("{:?}", solver)
 
