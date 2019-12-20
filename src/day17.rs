@@ -500,7 +500,6 @@ impl Solver {
 
     fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self>  {
         let num_moves_so_far = self.all_moves_so_far.len();
-        println!("num moves so far: {}", num_moves_so_far);
 
         if self.shortest_complete_path.load(Ordering::SeqCst) < num_moves_so_far {
             return None
@@ -525,7 +524,6 @@ impl Solver {
     }
 
     fn go(&self, m: &MoveWithGoodies) -> Self {
-        println!("start of go, hit {} spots previously", m.previously_unseen_locations.len());
         let mut next = self.clone();
         next.current_pos = m.next_pos;
         next.unvisited_locations = self.unvisited_locations
@@ -559,14 +557,12 @@ impl Solver {
             (1..).into_iter().map(move |i| {
                 let dxdy = (d1x * i, d1y * i);
                 let next_pos = checked_add_pos(self.current_pos, dxdy)?;
-                println!("starting_pos: {:?}, facing: {:?}, next pos: {:?}", self.current_pos, self.facing, next_pos);
                 if !self.scaffold_locations.contains(&next_pos) {
                     return None
                 } else {
 
                 }
 
-                println!("unvisited_locations: {:?}", self.unvisited_locations);
                 if self.unvisited_locations.contains(&next_pos) {
                     previously_unseen_locations.insert(next_pos);
                 }
