@@ -429,6 +429,15 @@ enum Move {
     Forward(usize),
 }
 
+fn is_short_enough(moves: &[Move]) -> bool {
+    // just an example: R,8,R,8,R,8,R,8,R,8
+    // 20 characters
+    // 10 instructions
+    // in order to be compressed super naively, that would be 30 total
+    // let's see if we can find anything
+    moves.len() <= 150
+}
+
 #[derive(Debug, Clone)]
 struct Solver {
     // TODO: this can be minimized to number of characters later
@@ -499,24 +508,30 @@ impl Solver {
     }
 
     fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self>  {
-        let num_moves_so_far = self.all_moves_so_far.len();
-
-        if self.shortest_complete_path.load(Ordering::SeqCst) < num_moves_so_far {
-            return None
-        }
-
+        //let num_moves_so_far = self.all_moves_so_far.len();
         if self.is_complete() {
-            if num_moves_so_far < self.shortest_complete_path.fetch_min(num_moves_so_far, Ordering::SeqCst) {
-                return Some(self.clone())
-            } else {
-                return None
-            }
+            println!("is complete: {}", self.all_moves_so_far.len());
+            return Some(self.clone())
         }
 
+
+//        if !is_short_enough(&self.all_moves_so_far) {
+//            return None
+//        }
+
+//        if self.shortest_complete_path.load(Ordering::SeqCst) < num_moves_so_far {
+//            return None
+//        }
+//
         self.most_effective_possible_moves_from_current_position().into_par_iter()
-            .map(|move_with_goodies| {
-                self.go(&move_with_goodies).shortest_path_touching_everything_at_least_once()
-            }).while_some().min_by_key(|solver| solver.all_moves_so_far.len())
+            .find_map_any(|move_with_goodies| {
+                if let Some(hoohaw) = self.go(&move_with_goodies).shortest_path_touching_everything_at_least_once() {
+                    println!("hoohaw");
+                    return Some(hoohaw)
+                } else {
+                    return None
+                }
+            })
     }
 
     fn is_complete(&self) -> bool {
@@ -559,10 +574,7 @@ impl Solver {
                 let next_pos = checked_add_pos(self.current_pos, dxdy)?;
                 if !self.scaffold_locations.contains(&next_pos) {
                     return None
-                } else {
-
                 }
-
                 if self.unvisited_locations.contains(&next_pos) {
                     previously_unseen_locations.insert(next_pos);
                 }
@@ -597,11 +609,8 @@ fn solve_part2(input: &str) -> String {
     let map_str = output.iter().map(|o| char::from(*o as u8)).collect();
     let map = parse_map(map_str);
     let solver = Solver::from_map(&map);
-    println!("{:?}", solver);
 
-    println!("{:?}", solver.most_effective_possible_moves_from_current_position());
-
-    solver.shortest_path_touching_everything_at_least_once();
+    return format!("{:?}", solver.shortest_path_touching_everything_at_least_once());
 
     // ok now begin part 2
     let mut proggy = input.split(",").map(|s| s.to_owned()).collect_vec();
@@ -610,7 +619,7 @@ fn solve_part2(input: &str) -> String {
     proggy[0] = "2".into();
     let _icc = IntCodeComputer::new(proggy);
 
-    format!("{:?}", solver)
+    //format!("{:?}", solver)
 
 //    for c in "A,B,C\nL\nL\nL\nn\n".chars() {
 //        icc.queue_input(c as i128)
