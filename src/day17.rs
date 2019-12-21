@@ -3,10 +3,11 @@ use crate::day17::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, J
 use crate::day17::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
-use std::iter::once;
+use std::iter::{once, empty};
 use rayon::prelude::{IntoParallelIterator,ParallelIterator, IndexedParallelIterator};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use rand::Rng;
 
 #[derive(Debug)]
 enum Instruction {
@@ -510,8 +511,32 @@ impl Solver {
     fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self>  {
         let num_moves_so_far = self.all_moves_so_far.len();
         if num_moves_so_far > 88 {
+            println!("{}", self.unvisited_locations.len());
             return None
         }
+
+        // let's get rid of totally bogus paths
+
+        // 3 of the same move in a row is bogus, you could just move the other direction
+//        if self.all_moves_so_far.iter().tuple_windows().any(|(move1, move2, move3)| {
+//            match (move1, move2, move3) {
+//                (Move::TurnRight, Move::TurnRight, Move::TurnRight) => true,
+//                (Move::TurnLeft, Move::TurnLeft, Move::TurnLeft) => true,
+//                _ => false,
+//            }
+//        }) {
+//            return None
+//        }
+
+        // 2 move forward commands in a row also bogus, it should just be one command
+//        if self.all_moves_so_far.iter().tuple_windows().any(|(move1, move2)| {
+//            match (move1, move2) {
+//                (Move::Forward(_), Move::Forward(_)) => true,
+//                _ => false,
+//            }
+//        }) {
+//            return None
+//        }
 
         if self.is_complete() {
             //println!("is complete: {}", self.all_moves_so_far.len());
@@ -529,14 +554,9 @@ impl Solver {
 //        }
 //
         self.most_effective_possible_moves_from_current_position().into_par_iter()
-            .take(2)
-            .find_map_any(|move_with_goodies| {
+            .filter_map(|move_with_goodies| {
                 self.go(&move_with_goodies).shortest_path_touching_everything_at_least_once()
-            }).map(|found| {
-                println!("found: {:?}", found.all_moves_so_far.len());
-                println!("found: {:?}", found.all_moves_so_far);
-                found
-            })
+            }).min_by_key(|solver| solver.all_moves_so_far.len())
     }
 
     fn is_complete(&self) -> bool {
@@ -567,27 +587,61 @@ impl Solver {
         next
     }
 
-    fn most_effective_possible_moves_from_current_position(&self) -> Vec<MoveWithGoodies> {
-        let (d1x, d1y) = self.d1xd1y();
-        let mut previously_unseen_locations = HashSet::new();
+    fn turn_left(&self) -> MoveWithGoodies {
+        MoveWithGoodies::left(self.current_pos)
+    }
 
-        // can always turn left and right
-        let mut moves = once(MoveWithGoodies::left(self.current_pos))
-            .chain(once(MoveWithGoodies::right(self.current_pos))).chain(
-            (1..).into_iter().map(move |i| {
-                let dxdy = (d1x * i, d1y * i);
-                let next_pos = checked_add_pos(self.current_pos, dxdy)?;
-                if !self.scaffold_locations.contains(&next_pos) {
-                    return None
-                }
-                if self.unvisited_locations.contains(&next_pos) {
-                    previously_unseen_locations.insert(next_pos);
-                }
-                Some(
-                    MoveWithGoodies::forward(i as usize,
-                                             previously_unseen_locations.clone(),
-                                             next_pos))
-            }).while_some()).collect_vec();
+    fn turn_right(&self) -> MoveWithGoodies {
+        MoveWithGoodies::right(self.current_pos)
+    }
+
+    fn directions(&self) -> Box<dyn Iterator<Item = MoveWithGoodies>> {
+        let mut last_moves = self.all_moves_so_far.iter().rev();
+        let last_move = last_moves.next();
+        let second_to_last_move = last_moves.next();
+        match (second_to_last_move, last_move) {
+            (None, None) => {
+                Box::new(once(self.turn_left()).chain(once(self.turn_right())))
+            },
+            (Some(Move::TurnLeft), Some(Move::TurnLeft)) => Box::new(empty()),
+            (Some(Move::TurnRight), Some(Move::TurnRight)) => Box::new(empty()),
+            // doesn't make sense to turn one direction and the other immediately afterwards
+            (_, Some(Move::TurnLeft)) => Box::new(once(self.turn_left())),
+            (_, Some(Move::TurnRight)) => Box::new(once(self.turn_right())),
+            otherwise => {
+                Box::new(once(self.turn_left()).chain(once(self.turn_right())))
+            },
+        }
+    }
+
+    fn forward(&self) -> Box<dyn Iterator<Item = MoveWithGoodies> + '_> {
+        let mut last_moves = self.all_moves_so_far.iter().rev();
+        let last_move = last_moves.next();
+        // don't move forward twice in a row
+        if let Some(Move::Forward(_)) = last_move {
+            return Box::new(empty())
+        }
+
+        let mut previously_unseen_locations = HashSet::new();
+        let (d1x, d1y) = self.d1xd1y();
+        Box::new((1..).into_iter().map(move |i| {
+            let dxdy = (d1x * i, d1y * i);
+            let next_pos = checked_add_pos(self.current_pos, dxdy)?;
+            if !self.scaffold_locations.contains(&next_pos) {
+                return None
+            }
+            if self.unvisited_locations.contains(&next_pos) {
+                previously_unseen_locations.insert(next_pos);
+            }
+            Some(
+                MoveWithGoodies::forward(i as usize,
+                                         previously_unseen_locations.clone(),
+                                         next_pos))
+        }).while_some())
+    }
+
+    fn most_effective_possible_moves_from_current_position(&self) -> Vec<MoveWithGoodies> {
+        let mut moves = self.directions().chain(self.forward()).collect_vec();
         moves.sort_by_key(|move_with_goodies| {
             // sort in descending order
             -1 * move_with_goodies.num_previously_unseen_locations() as isize
@@ -616,6 +670,7 @@ fn solve_part2(input: &str) -> String {
     let solver = Solver::from_map(&map);
 
     let shortest_path = solver.shortest_path_touching_everything_at_least_once();
+    return format!("shortest path: {:?}", shortest_path.map(|sp| sp.all_moves_so_far));
     return format!("length: {:?}", shortest_path.map(|sp| sp.all_moves_so_far.len()));
 
     // ok now begin part 2
