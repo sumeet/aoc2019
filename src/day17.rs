@@ -3,11 +3,6 @@ use crate::day17::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, J
 use crate::day17::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
-use std::iter::{once, empty};
-use rayon::prelude::{IntoParallelIterator,ParallelIterator, IndexedParallelIterator};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use rand::Rng;
 
 #[derive(Debug)]
 enum Instruction {
@@ -377,12 +372,32 @@ fn solve_part1(input: &str) -> usize {
     }).map(|(x, y)| x * y).sum()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum Direction {
     Up,
     Down,
     Left,
     Right,
+}
+
+impl Direction {
+    fn turn_left(&self) -> Self {
+        match self {
+            Direction::Up => Direction::Left,
+            Direction::Down => Direction::Right,
+            Direction::Left => Direction::Down,
+            Direction::Right => Direction::Up,
+        }
+    }
+
+    fn turn_right(&self) -> Self {
+        match self {
+            Direction::Up => Direction::Right,
+            Direction::Down => Direction::Left,
+            Direction::Left => Direction::Up,
+            Direction::Right => Direction::Down,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -430,21 +445,11 @@ enum Move {
     Forward(usize),
 }
 
-fn is_short_enough(moves: &[Move]) -> bool {
-    // just an example: R,8,R,8,R,8,R,8,R,8
-    // 20 characters
-    // 10 instructions
-    // in order to be compressed super naively, that would be 30 total
-    // let's see if we can find anything
-    moves.len() <= 150
-}
-
 #[derive(Debug, Clone)]
 struct Solver {
     // TODO: this can be minimized to number of characters later
     unvisited_locations: HashSet<(usize, usize)>,
     all_moves_so_far: Vec<Move>,
-    shortest_complete_path: Arc<AtomicUsize>,
     scaffold_locations: HashSet<(usize, usize)>,
     current_pos: (usize, usize),
     facing: Direction,
@@ -503,60 +508,19 @@ impl Solver {
             facing,
             unvisited_locations,
             all_moves_so_far: vec![],
-            // if anything finishes, hopefully it's smaller than this lol
-            shortest_complete_path: Arc::new(AtomicUsize::new(99999)),
         }
     }
 
     fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self>  {
-        let num_moves_so_far = self.all_moves_so_far.len();
-        if num_moves_so_far > 88 {
-            println!("{}", self.unvisited_locations.len());
-            return None
+        let mut solver = self.clone();
+        loop {
+            if solver.is_complete() {
+                return Some(solver)
+            }
+
+            let next_move = solver.next_move()?;
+            solver = solver.go(&next_move);
         }
-
-        // let's get rid of totally bogus paths
-
-        // 3 of the same move in a row is bogus, you could just move the other direction
-//        if self.all_moves_so_far.iter().tuple_windows().any(|(move1, move2, move3)| {
-//            match (move1, move2, move3) {
-//                (Move::TurnRight, Move::TurnRight, Move::TurnRight) => true,
-//                (Move::TurnLeft, Move::TurnLeft, Move::TurnLeft) => true,
-//                _ => false,
-//            }
-//        }) {
-//            return None
-//        }
-
-        // 2 move forward commands in a row also bogus, it should just be one command
-//        if self.all_moves_so_far.iter().tuple_windows().any(|(move1, move2)| {
-//            match (move1, move2) {
-//                (Move::Forward(_), Move::Forward(_)) => true,
-//                _ => false,
-//            }
-//        }) {
-//            return None
-//        }
-
-        if self.is_complete() {
-            //println!("is complete: {}", self.all_moves_so_far.len());
-            return Some(self.clone())
-        }
-
-
-
-//        if !is_short_enough(&self.all_moves_so_far) {
-//            return None
-//        }
-
-//        if self.shortest_complete_path.load(Ordering::SeqCst) < num_moves_so_far {
-//            return None
-//        }
-//
-        self.most_effective_possible_moves_from_current_position().into_par_iter()
-            .filter_map(|move_with_goodies| {
-                self.go(&move_with_goodies).shortest_path_touching_everything_at_least_once()
-            }).min_by_key(|solver| solver.all_moves_so_far.len())
     }
 
     fn is_complete(&self) -> bool {
@@ -570,18 +534,8 @@ impl Solver {
             .difference(&m.previously_unseen_locations).cloned().collect();
         next.facing = match m.cmd {
             Move::Forward(_) => next.facing.clone(),
-            Move::TurnLeft => match self.facing {
-                Direction::Up => Direction::Left,
-                Direction::Down => Direction::Right,
-                Direction::Left => Direction::Down,
-                Direction::Right => Direction::Up,
-            },
-            Move::TurnRight => match self.facing {
-                Direction::Up => Direction::Right,
-                Direction::Down => Direction::Left,
-                Direction::Left => Direction::Up,
-                Direction::Right => Direction::Down,
-            }
+            Move::TurnLeft => self.facing.turn_left(),
+            Move::TurnRight => self.facing.turn_right(),
         };
         next.all_moves_so_far.push(m.cmd.clone());
         next
@@ -595,38 +549,12 @@ impl Solver {
         MoveWithGoodies::right(self.current_pos)
     }
 
-    fn directions(&self) -> Box<dyn Iterator<Item = MoveWithGoodies>> {
-        let mut last_moves = self.all_moves_so_far.iter().rev();
-        let last_move = last_moves.next();
-        let second_to_last_move = last_moves.next();
-        match (second_to_last_move, last_move) {
-            (None, None) => {
-                Box::new(once(self.turn_left()).chain(once(self.turn_right())))
-            },
-            (Some(Move::TurnLeft), Some(Move::TurnLeft)) => Box::new(empty()),
-            (Some(Move::TurnRight), Some(Move::TurnRight)) => Box::new(empty()),
-            // doesn't make sense to turn one direction and the other immediately afterwards
-            (_, Some(Move::TurnLeft)) => Box::new(once(self.turn_left())),
-            (_, Some(Move::TurnRight)) => Box::new(once(self.turn_right())),
-            otherwise => {
-                Box::new(once(self.turn_left()).chain(once(self.turn_right())))
-            },
-        }
-    }
-
-    fn forward(&self) -> Box<dyn Iterator<Item = MoveWithGoodies> + '_> {
-        let mut last_moves = self.all_moves_so_far.iter().rev();
-        let last_move = last_moves.next();
-        // don't move forward twice in a row
-        if let Some(Move::Forward(_)) = last_move {
-            return Box::new(empty())
-        }
-
+    fn forward(&self, pos: (usize, usize), from: Direction) -> Option<MoveWithGoodies> {
         let mut previously_unseen_locations = HashSet::new();
-        let (d1x, d1y) = self.d1xd1y();
-        Box::new((1..).into_iter().map(move |i| {
+        let (d1x, d1y) = self.d1xd1y(from);
+        (1..).into_iter().map(move |i| {
             let dxdy = (d1x * i, d1y * i);
-            let next_pos = checked_add_pos(self.current_pos, dxdy)?;
+            let next_pos = checked_add_pos(pos, dxdy)?;
             if !self.scaffold_locations.contains(&next_pos) {
                 return None
             }
@@ -637,20 +565,36 @@ impl Solver {
                 MoveWithGoodies::forward(i as usize,
                                          previously_unseen_locations.clone(),
                                          next_pos))
-        }).while_some())
+        }).while_some()
+          .max_by_key(|move_with_goodies| {
+              move_with_goodies.num_previously_unseen_locations()
+          })
     }
 
-    fn most_effective_possible_moves_from_current_position(&self) -> Vec<MoveWithGoodies> {
-        let mut moves = self.directions().chain(self.forward()).collect_vec();
-        moves.sort_by_key(|move_with_goodies| {
-            // sort in descending order
-            -1 * move_with_goodies.num_previously_unseen_locations() as isize
-        });
-        moves
+    fn next_move(&self) -> Option<MoveWithGoodies> {
+        // if we can move forward and pick up some unseen locations, then do it
+        let forward_from_current_pos = self.forward(self.current_pos,
+                                                    self.facing);
+        if forward_from_current_pos.is_some() {
+            return forward_from_current_pos
+        }
+
+        // otherwise we need to turn either left or right, figure out which one
+
+        // for left
+        if let Some(_) = self.forward(self.current_pos, self.facing.turn_left()) {
+            return Some(self.turn_left());
+        }
+
+        if let Some(_) = self.forward(self.current_pos, self.facing.turn_right()) {
+            return Some(self.turn_right());
+        }
+
+        None
     }
 
-    fn d1xd1y(&self) -> (isize, isize) {
-        match self.facing {
+    fn d1xd1y(&self, direction: Direction) -> (isize, isize) {
+        match direction {
             Direction::Up => (0, 1),
             Direction::Down => (0, -1),
             Direction::Left => (-1, 0),
@@ -670,8 +614,7 @@ fn solve_part2(input: &str) -> String {
     let solver = Solver::from_map(&map);
 
     let shortest_path = solver.shortest_path_touching_everything_at_least_once();
-    return format!("shortest path: {:?}", shortest_path.map(|sp| sp.all_moves_so_far));
-    return format!("length: {:?}", shortest_path.map(|sp| sp.all_moves_so_far.len()));
+    return format!("shortest path: {:?}", shortest_path.map(|sp| (sp.all_moves_so_far.len(), sp.all_moves_so_far)));
 
     // ok now begin part 2
     let mut proggy = input.split(",").map(|s| s.to_owned()).collect_vec();
