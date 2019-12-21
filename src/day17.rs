@@ -4,7 +4,7 @@ use crate::day17::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
 use std::iter::once;
-use rayon::prelude::{IntoParallelIterator,ParallelIterator};
+use rayon::prelude::{IntoParallelIterator,ParallelIterator, IndexedParallelIterator};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -441,12 +441,12 @@ fn is_short_enough(moves: &[Move]) -> bool {
 #[derive(Debug, Clone)]
 struct Solver {
     // TODO: this can be minimized to number of characters later
+    unvisited_locations: HashSet<(usize, usize)>,
+    all_moves_so_far: Vec<Move>,
     shortest_complete_path: Arc<AtomicUsize>,
     scaffold_locations: HashSet<(usize, usize)>,
     current_pos: (usize, usize),
     facing: Direction,
-    unvisited_locations: HashSet<(usize, usize)>,
-    all_moves_so_far: Vec<Move>,
 }
 
 impl Solver {
@@ -508,11 +508,16 @@ impl Solver {
     }
 
     fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self>  {
-        //let num_moves_so_far = self.all_moves_so_far.len();
+        let num_moves_so_far = self.all_moves_so_far.len();
+        if num_moves_so_far > 88 {
+            return None
+        }
+
         if self.is_complete() {
-            println!("is complete: {}", self.all_moves_so_far.len());
+            //println!("is complete: {}", self.all_moves_so_far.len());
             return Some(self.clone())
         }
+
 
 
 //        if !is_short_enough(&self.all_moves_so_far) {
@@ -524,13 +529,13 @@ impl Solver {
 //        }
 //
         self.most_effective_possible_moves_from_current_position().into_par_iter()
+            .take(2)
             .find_map_any(|move_with_goodies| {
-                if let Some(hoohaw) = self.go(&move_with_goodies).shortest_path_touching_everything_at_least_once() {
-                    println!("hoohaw");
-                    return Some(hoohaw)
-                } else {
-                    return None
-                }
+                self.go(&move_with_goodies).shortest_path_touching_everything_at_least_once()
+            }).map(|found| {
+                println!("found: {:?}", found.all_moves_so_far.len());
+                println!("found: {:?}", found.all_moves_so_far);
+                found
             })
     }
 
@@ -610,7 +615,8 @@ fn solve_part2(input: &str) -> String {
     let map = parse_map(map_str);
     let solver = Solver::from_map(&map);
 
-    return format!("{:?}", solver.shortest_path_touching_everything_at_least_once());
+    let shortest_path = solver.shortest_path_touching_everything_at_least_once();
+    return format!("length: {:?}", shortest_path.map(|sp| sp.all_moves_so_far.len()));
 
     // ok now begin part 2
     let mut proggy = input.split(",").map(|s| s.to_owned()).collect_vec();
