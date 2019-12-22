@@ -780,11 +780,9 @@ fn solve_part2(input: &str) -> i128 {
 
     // solve the maze
     let shortest_path = solver.shortest_path_touching_everything_at_least_once().unwrap();
-    println!("shortest path: {:?}", (shortest_path.all_moves_so_far.len(), &shortest_path.all_moves_so_far));
 
     // then compress the path
     let compressed = compress(&shortest_path.all_moves_so_far).unwrap();
-    println!("compressed: {:?}", compressed);
 
     let ascii_input = turn_into_ascii_input(&compressed);
 
@@ -794,12 +792,13 @@ fn solve_part2(input: &str) -> i128 {
     assert_eq!(proggy[0], "1");
     proggy[0] = "2".into();
     let mut icc = IntCodeComputer::new(proggy);
-    for c in (ascii_input + "\nn\n").chars() {
+    let show_camera_feed = "n";
+    for c in (ascii_input + "\n" + show_camera_feed + "\n").chars() {
         icc.queue_input(c as i128)
     }
     let output = icc.run_until_halt();
     let (num_dust_collected, map_output) = output.split_last().unwrap();
-    let map_str = map_output.iter().map(|o| char::from(*o as u8)).collect::<String>();
-    println!("{}", map_str);
+    let _map_str = map_output.iter().map(|o| char::from(*o as u8)).collect::<String>();
+    //println!("{}", map_str);
     *num_dust_collected
 }
