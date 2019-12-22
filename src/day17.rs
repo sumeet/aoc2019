@@ -1,4 +1,4 @@
-use std::collections::{VecDeque, HashSet};
+use std::collections::{VecDeque, HashSet, HashMap};
 use crate::day17::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, JumpIfFalse6, LessThan7, Equals8, Halt99, RelativeBaseOffset9};
 use crate::day17::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
 use defaultmap::DefaultHashMap;
@@ -315,6 +315,8 @@ struct Map {
 impl Map {
     fn points(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         (0..self.rows.len()).map(move |y| {
+            // gotta reverse the rows because otherwise the map is upside down
+            // inside out
             (0..self.rows[y].len()).map(move |x| {
                 (x, y)
             })
@@ -323,7 +325,7 @@ impl Map {
 }
 
 fn parse_map(s: String) -> Map {
-    Map { rows: s.lines().map(|line| line.chars().collect()).collect() }
+    Map { rows: s.lines().rev().map(|line| line.chars().collect()).collect() }
 }
 
 fn cells_needed_for_intersect(pos: (usize, usize), map: &Map) -> Option<Vec<char>> {
@@ -629,7 +631,7 @@ impl WindowIndex {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum CompressedPathElement {
     Uncompressed(Move),
     Compressed(Vec<Move>),
@@ -643,6 +645,14 @@ impl CompressedPathElement {
             None
         }
     }
+
+    fn as_moves(&self) -> Option<&[Move]> {
+        if let Self::Compressed(m) = self {
+            Some(&m)
+        } else {
+            None
+        }
+    }
 }
 
 // we can only compress into 3 functions, A, B, and C
@@ -652,11 +662,8 @@ fn compress(path: &[Move]) -> Option<Vec<CompressedPathElement>> {
         .map(|m| CompressedPathElement::Uncompressed(m)).collect_vec();
 
     for _ in 0..NUM_FUNCTIONS {
-        // functions can only be 10 long, which is approximately 10 instructions with 9 commas in between
-        // this doesn't seem super precise but seems to work for our needs
-//        let max_repeatable_length = 10;
-//        let window_lengths = (2..=max_repeatable_length).rev();
-        let window_lengths = (2..=4).filter(|i| i % 2 == 0).rev();
+        // these are the MAGIC NUMBERS!
+        let window_lengths = (2..=8).filter(|i| i % 2 == 0).rev();
 
         let mut window_index = WindowIndex::new();
         for window_length in window_lengths {
@@ -676,7 +683,16 @@ fn compress(path: &[Move]) -> Option<Vec<CompressedPathElement>> {
             }
         }
 
-        let (moves, indices) = window_index.most_effective_compression_candidates().next()?;
+        let first_uncompressed_index = compressed.iter().enumerate().find(|(_i, cpe)| {
+            if let CompressedPathElement::Uncompressed(_) = cpe {
+                true
+            } else {
+                false
+            }
+        }).unwrap().0;
+        let (moves, indices) = window_index.most_effective_compression_candidates().filter(|(_moves, indices)| {
+            indices.contains(&first_uncompressed_index)
+        }).next()?;
 
         let mut original = compressed.iter().enumerate().peekable();
         let mut new_compressed = vec![];
@@ -721,8 +737,39 @@ fn still_contains_uncompressed(compressed: &[CompressedPathElement]) -> bool {
     })
 }
 
+fn to_ascii(mv: &Move) -> String {
+    match mv {
+        Move::TurnLeft => "L".to_string(),
+        Move::TurnRight => "R".to_string(),
+        Move::Forward(n) => n.to_string(),
+    }
+}
+
+fn turn_into_ascii_input(compressed_path_elements: &[CompressedPathElement]) -> String {
+    let mut cpes = compressed_path_elements.into_iter()
+        .map(|cpe| Some(cpe)).collect_vec();
+
+    let mut main_routine = std::iter::repeat("").take(cpes.len()).collect_vec();
+    let function_names = ["A", "B", "C"];
+    let mut function_by_name : HashMap<&str, &[Move]> = HashMap::with_capacity(function_names.len());
+    for function_name in function_names.iter() {
+        let first = cpes.iter().flatten().next().unwrap();
+        let positions = cpes.iter()
+            .positions(|cpe| cpe.as_ref() == Some(first)).collect_vec();
+        function_by_name.insert(function_name, first.as_moves().unwrap());
+        for position in positions {
+            main_routine[position] = function_name;
+            cpes[position] = None;
+        }
+    }
+
+    main_routine.iter().join(",") + "\n" + &function_names.iter().map(|function_name| {
+        function_by_name.get(function_name).unwrap().iter().map(to_ascii).join(",")
+    }).join("\n")
+}
+
 #[aoc(day17, part2)]
-fn solve_part2(input: &str) -> String {
+fn solve_part2(input: &str) -> i128 {
     // make a version of the map from part1, before making the program again
     let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
@@ -736,25 +783,23 @@ fn solve_part2(input: &str) -> String {
     println!("shortest path: {:?}", (shortest_path.all_moves_so_far.len(), &shortest_path.all_moves_so_far));
 
     // then compress the path
-    let compressed = compress(&shortest_path.all_moves_so_far);
+    let compressed = compress(&shortest_path.all_moves_so_far).unwrap();
+    println!("compressed: {:?}", compressed);
 
-    return format!("compressed: {:?}", compressed);
+    let ascii_input = turn_into_ascii_input(&compressed);
 
     // ok now begin part 2
     let mut proggy = input.split(",").map(|s| s.to_owned()).collect_vec();
     // make the robot wake up by changing the first instruction from a 1 to 2
     assert_eq!(proggy[0], "1");
     proggy[0] = "2".into();
-    let _icc = IntCodeComputer::new(proggy);
-
-    //format!("{:?}", solver)
-
-//    for c in "A,B,C\nL\nL\nL\nn\n".chars() {
-//        icc.queue_input(c as i128)
-//    }
-//
-//    let output = icc.run_until_halt();
-//    let map_str = output.iter().map(|o| char::from(*o as u8)).collect::<String>();
-//    format!("{}", map_str);
-//    "".to_string()
+    let mut icc = IntCodeComputer::new(proggy);
+    for c in (ascii_input + "\nn\n").chars() {
+        icc.queue_input(c as i128)
+    }
+    let output = icc.run_until_halt();
+    let (num_dust_collected, map_output) = output.split_last().unwrap();
+    let map_str = map_output.iter().map(|o| char::from(*o as u8)).collect::<String>();
+    println!("{}", map_str);
+    *num_dust_collected
 }
