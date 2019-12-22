@@ -438,7 +438,7 @@ impl MoveWithGoodies {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Copy, Debug, Clone, Hash, PartialEq, Eq)]
 enum Move {
     TurnLeft,
     TurnRight,
@@ -603,6 +603,124 @@ impl Solver {
     }
 }
 
+#[derive(Debug)]
+struct WindowIndex {
+    starting_indeces_by_path: DefaultHashMap<Vec<Move>, Vec<usize>>,
+}
+
+impl WindowIndex {
+    fn new() -> Self {
+        Self { starting_indeces_by_path: DefaultHashMap::new(vec![]) }
+    }
+
+    fn saw_window(&mut self, window: Vec<Move>, at: usize) {
+        self.starting_indeces_by_path[window].push(at);
+    }
+
+    fn most_effective_compression_candidates(&self) -> impl Iterator<Item = (&[Move], &[usize])> {
+        self.starting_indeces_by_path.iter()
+            .map(|(moves, indices)| (moves.as_slice(), indices.as_slice()))
+            // number of moves times number of places it occurs is kind of like an efficiency score,
+            // i think technically it's a little different but this might be good enough
+            //
+            // and then multiply by -1 for descending
+            .sorted_by_key(|(moves, indices)| moves.len() as isize * indices.len() as isize * -1)
+    }
+}
+
+
+#[derive(Clone, Debug)]
+enum CompressedPathElement {
+    Uncompressed(Move),
+    Compressed(Vec<Move>),
+}
+
+impl CompressedPathElement {
+    fn as_move(&self) -> Option<Move> {
+        if let Self::Uncompressed(m) = self {
+            Some(*m)
+        } else {
+            None
+        }
+    }
+}
+
+// we can only compress into 3 functions, A, B, and C
+const NUM_FUNCTIONS : usize = 3;
+fn compress(path: &[Move]) -> Option<Vec<CompressedPathElement>> {
+    let mut compressed = path.iter().cloned()
+        .map(|m| CompressedPathElement::Uncompressed(m)).collect_vec();
+
+    for _ in 0..NUM_FUNCTIONS {
+        // functions can only be 10 long, which is approximately 10 instructions with 9 commas in between
+        // this doesn't seem super precise but seems to work for our needs
+//        let max_repeatable_length = 10;
+//        let window_lengths = (2..=max_repeatable_length).rev();
+        let window_lengths = (2..=4).filter(|i| i % 2 == 0).rev();
+
+        let mut window_index = WindowIndex::new();
+        for window_length in window_lengths {
+
+            // TODO: shouldn't need to collect this...
+            let compressed_enumerated = compressed.iter().enumerate().collect_vec();
+            let uncompressed_windows = compressed_enumerated
+                .windows(window_length)
+                .map(|window| {
+                    let (starting_index, _) = window.first().unwrap();
+                    (*starting_index, window.iter().map(|(_i, pe)| pe).collect_vec())
+                })
+                .filter(| (_i, window)| !contains_compressed(window.into_iter()));
+            for (starting_index, window) in uncompressed_windows {
+                let window = window.iter().filter_map(|cpe| cpe.as_move()).collect();
+                window_index.saw_window(window, starting_index)
+            }
+        }
+
+        let (moves, indices) = window_index.most_effective_compression_candidates().next()?;
+
+        let mut original = compressed.iter().enumerate().peekable();
+        let mut new_compressed = vec![];
+        while original.peek().is_some() {
+            let (index, cpe) = original.next().unwrap();
+            if indices.contains(&index) {
+                for _ in 0..(moves.len() - 1) {
+                    original.next();
+                }
+                new_compressed.push(CompressedPathElement::Compressed(moves.to_vec()))
+            } else {
+                new_compressed.push(cpe.clone())
+            }
+        }
+        compressed = new_compressed;
+
+        if !still_contains_uncompressed(&compressed) {
+            return Some(compressed)
+        }
+    }
+    println!("{:?}", compressed);
+    return None
+}
+
+fn contains_compressed<'a>(mut compressed: impl Iterator<Item = &'a&'a&'a CompressedPathElement>) -> bool {
+    compressed.any(|cpe| {
+        if let CompressedPathElement::Compressed(_) = cpe {
+            return true
+        } else {
+            return false
+        }
+    })
+}
+
+fn still_contains_uncompressed(compressed: &[CompressedPathElement]) -> bool {
+    compressed.iter().any(|cpe| {
+        if let CompressedPathElement::Uncompressed(_) = cpe {
+            return true
+        } else {
+            return false
+        }
+    })
+}
+
 #[aoc(day17, part2)]
 fn solve_part2(input: &str) -> String {
     // make a version of the map from part1, before making the program again
@@ -613,8 +731,14 @@ fn solve_part2(input: &str) -> String {
     let map = parse_map(map_str);
     let solver = Solver::from_map(&map);
 
-    let shortest_path = solver.shortest_path_touching_everything_at_least_once();
-    return format!("shortest path: {:?}", shortest_path.map(|sp| (sp.all_moves_so_far.len(), sp.all_moves_so_far)));
+    // solve the maze
+    let shortest_path = solver.shortest_path_touching_everything_at_least_once().unwrap();
+    println!("shortest path: {:?}", (shortest_path.all_moves_so_far.len(), &shortest_path.all_moves_so_far));
+
+    // then compress the path
+    let compressed = compress(&shortest_path.all_moves_so_far);
+
+    return format!("compressed: {:?}", compressed);
 
     // ok now begin part 2
     let mut proggy = input.split(",").map(|s| s.to_owned()).collect_vec();
