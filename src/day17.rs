@@ -1,8 +1,11 @@
-use std::collections::{VecDeque, HashSet, HashMap};
-use crate::day17::Instruction::{Add1, Multiply2, Input3, Output4, JumpIfTrue5, JumpIfFalse6, LessThan7, Equals8, Halt99, RelativeBaseOffset9};
-use crate::day17::ParameterMode::{PositionMode0, ImmediateMode1, RelativeMode2};
+use crate::day17::Instruction::{
+    Add1, Equals8, Halt99, Input3, JumpIfFalse6, JumpIfTrue5, LessThan7, Multiply2, Output4,
+    RelativeBaseOffset9,
+};
+use crate::day17::ParameterMode::{ImmediateMode1, PositionMode0, RelativeMode2};
 use defaultmap::DefaultHashMap;
 use itertools::Itertools;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(Debug)]
 enum Instruction {
@@ -88,52 +91,53 @@ impl ParameterMode {
             '0' => PositionMode0,
             '1' => ImmediateMode1,
             '2' => RelativeMode2,
-            _ => panic!(format!("unable to parse param mode {:?}", c))
+            _ => panic!(format!("unable to parse param mode {:?}", c)),
         }
     }
 }
 
-fn get_first_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
+fn get_first_param(
+    proggy: &Proggy,
+    instruction_pos: usize,
+    mode: ParameterMode,
+    relative_base: i128,
+) -> i128 {
     let i = proggy[instruction_pos + 1].parse().unwrap();
     match mode {
-        PositionMode0 => {
-            proggy[i as usize].parse().unwrap()
-        },
-        ImmediateMode1 => {
-            i
-        },
-        RelativeMode2 => {
-            proggy[(i + relative_base) as usize].parse::<i128>().unwrap()
-        }
+        PositionMode0 => proggy[i as usize].parse().unwrap(),
+        ImmediateMode1 => i,
+        RelativeMode2 => proggy[(i + relative_base) as usize]
+            .parse::<i128>()
+            .unwrap(),
     }
 }
 
-fn get_second_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
+fn get_second_param(
+    proggy: &Proggy,
+    instruction_pos: usize,
+    mode: ParameterMode,
+    relative_base: i128,
+) -> i128 {
     let i = proggy[instruction_pos + 2].parse().unwrap();
     match mode {
-        PositionMode0 => {
-            proggy[i as usize].parse().unwrap()
-        },
-        ImmediateMode1 => {
-            i
-        },
-        RelativeMode2 => {
-            proggy[(i + relative_base) as usize].parse::<i128>().unwrap()
-        }
+        PositionMode0 => proggy[i as usize].parse().unwrap(),
+        ImmediateMode1 => i,
+        RelativeMode2 => proggy[(i + relative_base) as usize]
+            .parse::<i128>()
+            .unwrap(),
     }
 }
 
-fn get_third_param(proggy: &Proggy, instruction_pos: usize, mode: ParameterMode, relative_base: i128) -> i128 {
+fn get_third_param(
+    proggy: &Proggy,
+    instruction_pos: usize,
+    mode: ParameterMode,
+    relative_base: i128,
+) -> i128 {
     match mode {
-        PositionMode0 => {
-            proggy[instruction_pos + 3].parse().unwrap()
-        },
-        ImmediateMode1 => {
-            panic!("invalid program, third param can't be immediate mode")
-        },
-        RelativeMode2 => {
-            proggy[instruction_pos + 3].parse::<i128>().unwrap() + relative_base
-        }
+        PositionMode0 => proggy[instruction_pos + 3].parse().unwrap(),
+        ImmediateMode1 => panic!("invalid program, third param can't be immediate mode"),
+        RelativeMode2 => proggy[instruction_pos + 3].parse::<i128>().unwrap() + relative_base,
     }
 }
 
@@ -156,9 +160,14 @@ enum RunResult {
 
 impl IntCodeComputer {
     fn new(proggy: Vec<String>) -> Self {
-        let proggy = DefaultHashMap::new_with_map(
-            "0".to_owned(), proggy.into_iter().enumerate().collect());
-        IntCodeComputer { proggy, input: VecDeque::new(), current_pos: 0, relative_base: 0 }
+        let proggy =
+            DefaultHashMap::new_with_map("0".to_owned(), proggy.into_iter().enumerate().collect());
+        IntCodeComputer {
+            proggy,
+            input: VecDeque::new(),
+            current_pos: 0,
+            relative_base: 0,
+        }
     }
 
     #[allow(unused)]
@@ -219,94 +228,90 @@ impl IntCodeComputer {
     }
 
     fn run(&mut self) -> impl Iterator<Item = RunResult> + '_ {
-        std::iter::from_fn(move || {
-            loop {
-                let instruction = Instruction::parse(&self.proggy[self.current_pos].to_string());
-                match instruction {
-                    Add1(first_mode, second_mode, third_mode) => {
-                        let param_1 = self.get_first_param(first_mode);
-                        let param_2 = self.get_second_param(second_mode);
-                        let param_3 = self.get_third_param(third_mode);
-                        self.proggy[param_3 as usize] = (param_1 + param_2).to_string();
-                        self.current_pos += 4;
-                    },
-                    Multiply2(first_mode, second_mode, third_mode) => {
-                        let param_1 = self.get_first_param(first_mode);
-                        let param_2 = self.get_second_param(second_mode);
-                        let param_3 = self.get_third_param(third_mode);
-                        self.proggy[param_3 as usize] = (param_1 * param_2).to_string();
-                        self.current_pos += 4;
-                    },
-                    Input3(mode) => {
-                        let raw_position = self.get_input_param(mode);
-                        match self.input.pop_back() {
-                            Some(input) => {
-                                self.proggy[raw_position] = input.to_string();
-                                self.current_pos += 2;
-                            }
-                            None => return Some(RunResult::NeedMoreInput)
+        std::iter::from_fn(move || loop {
+            let instruction = Instruction::parse(&self.proggy[self.current_pos].to_string());
+            match instruction {
+                Add1(first_mode, second_mode, third_mode) => {
+                    let param_1 = self.get_first_param(first_mode);
+                    let param_2 = self.get_second_param(second_mode);
+                    let param_3 = self.get_third_param(third_mode);
+                    self.proggy[param_3 as usize] = (param_1 + param_2).to_string();
+                    self.current_pos += 4;
+                }
+                Multiply2(first_mode, second_mode, third_mode) => {
+                    let param_1 = self.get_first_param(first_mode);
+                    let param_2 = self.get_second_param(second_mode);
+                    let param_3 = self.get_third_param(third_mode);
+                    self.proggy[param_3 as usize] = (param_1 * param_2).to_string();
+                    self.current_pos += 4;
+                }
+                Input3(mode) => {
+                    let raw_position = self.get_input_param(mode);
+                    match self.input.pop_back() {
+                        Some(input) => {
+                            self.proggy[raw_position] = input.to_string();
+                            self.current_pos += 2;
                         }
-                    },
-                    Output4(mode) => {
-                        let param = self.get_first_param(mode);
-                        self.current_pos += 2;
-                        return Some(RunResult::Output(param))
-                    },
-                    Halt99 => {
-                        return Some(RunResult::Halt);
-                    },
-                    JumpIfTrue5(first_mode, second_mode) => {
-                        let param_1 = self.get_first_param(first_mode);
-                        let param_2 = self.get_second_param(second_mode);
-                        if param_1 != 0 {
-                            self.current_pos = param_2 as usize;
-                        } else {
-                            self.current_pos += 3;
-                        }
-                    }
-                    JumpIfFalse6(first_mode, second_mode) => {
-                        let param_1 = self.get_first_param(first_mode);
-                        let param_2 = self.get_second_param(second_mode);
-                        if param_1 == 0 {
-                            self.current_pos = param_2 as usize;
-                        } else {
-                            self.current_pos += 3;
-                        }
-                    }
-                    LessThan7(first_mode, second_mode, third_mode) => {
-                        let param_1 = self.get_first_param(first_mode);
-                        let param_2 = self.get_second_param(second_mode);
-                        let param_3 = self.get_third_param(third_mode);
-                        self.proggy[param_3 as usize] = if param_1 < param_2 {
-                            "1".to_owned()
-                        } else {
-                            "0".to_owned()
-                        };
-                        self.current_pos += 4;
-                    }
-                    Equals8(first_mode, second_mode, third_mode) => {
-                        let param_1 = self.get_first_param(first_mode);
-                        let param_2 = self.get_second_param(second_mode);
-                        let param_3 = self.get_third_param(third_mode);
-                        self.proggy[param_3 as usize] = if param_1 == param_2 {
-                            "1".to_owned()
-                        } else {
-                            "0".to_owned()
-                        };
-                        self.current_pos += 4;
-                    }
-                    RelativeBaseOffset9(first_mode) => {
-                        let param_1 = self.get_first_param(first_mode);
-                        self.relative_base += param_1 as i128;
-                        self.current_pos += 2;
+                        None => return Some(RunResult::NeedMoreInput),
                     }
                 }
-
+                Output4(mode) => {
+                    let param = self.get_first_param(mode);
+                    self.current_pos += 2;
+                    return Some(RunResult::Output(param));
+                }
+                Halt99 => {
+                    return Some(RunResult::Halt);
+                }
+                JumpIfTrue5(first_mode, second_mode) => {
+                    let param_1 = self.get_first_param(first_mode);
+                    let param_2 = self.get_second_param(second_mode);
+                    if param_1 != 0 {
+                        self.current_pos = param_2 as usize;
+                    } else {
+                        self.current_pos += 3;
+                    }
+                }
+                JumpIfFalse6(first_mode, second_mode) => {
+                    let param_1 = self.get_first_param(first_mode);
+                    let param_2 = self.get_second_param(second_mode);
+                    if param_1 == 0 {
+                        self.current_pos = param_2 as usize;
+                    } else {
+                        self.current_pos += 3;
+                    }
+                }
+                LessThan7(first_mode, second_mode, third_mode) => {
+                    let param_1 = self.get_first_param(first_mode);
+                    let param_2 = self.get_second_param(second_mode);
+                    let param_3 = self.get_third_param(third_mode);
+                    self.proggy[param_3 as usize] = if param_1 < param_2 {
+                        "1".to_owned()
+                    } else {
+                        "0".to_owned()
+                    };
+                    self.current_pos += 4;
+                }
+                Equals8(first_mode, second_mode, third_mode) => {
+                    let param_1 = self.get_first_param(first_mode);
+                    let param_2 = self.get_second_param(second_mode);
+                    let param_3 = self.get_third_param(third_mode);
+                    self.proggy[param_3 as usize] = if param_1 == param_2 {
+                        "1".to_owned()
+                    } else {
+                        "0".to_owned()
+                    };
+                    self.current_pos += 4;
+                }
+                RelativeBaseOffset9(first_mode) => {
+                    let param_1 = self.get_first_param(first_mode);
+                    self.relative_base += param_1 as i128;
+                    self.current_pos += 2;
+                }
             }
         })
     }
 }
-
 
 struct Map {
     rows: Vec<Vec<char>>,
@@ -314,18 +319,20 @@ struct Map {
 
 impl Map {
     fn points(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
-        (0..self.rows.len()).map(move |y| {
-            // gotta reverse the rows because otherwise the map is upside down
-            // inside out
-            (0..self.rows[y].len()).map(move |x| {
-                (x, y)
+        (0..self.rows.len())
+            .map(move |y| {
+                // gotta reverse the rows because otherwise the map is upside down
+                // inside out
+                (0..self.rows[y].len()).map(move |x| (x, y))
             })
-        }).flatten()
+            .flatten()
     }
 }
 
 fn parse_map(s: String) -> Map {
-    Map { rows: s.lines().rev().map(|line| line.chars().collect()).collect() }
+    Map {
+        rows: s.lines().rev().map(|line| line.chars().collect()).collect(),
+    }
 }
 
 fn cells_needed_for_intersect(pos: (usize, usize), map: &Map) -> Option<Vec<char>> {
@@ -333,15 +340,19 @@ fn cells_needed_for_intersect(pos: (usize, usize), map: &Map) -> Option<Vec<char
     //  dab
     //   e
     let points = [
-        (0, 0), //  a
-        (1, 0), //  b
-        (0, 1), //  c
+        (0, 0),  //  a
+        (1, 0),  //  b
+        (0, 1),  //  c
         (-1, 0), // d
         (0, -1), // e
-    ].iter().map(|(dx, dy)| {
-        Some((checked_add(pos.0, *dx)?, checked_add(pos.1, *dy)?))
-    }).collect::<Option<Vec<_>>>()?;
-    points.iter().map(|point| Some(*map.rows.get(point.1)?.get(point.0)?)).collect()
+    ]
+    .iter()
+    .map(|(dx, dy)| Some((checked_add(pos.0, *dx)?, checked_add(pos.1, *dy)?)))
+    .collect::<Option<Vec<_>>>()?;
+    points
+        .iter()
+        .map(|point| Some(*map.rows.get(point.1)?.get(point.0)?))
+        .collect()
 }
 
 fn checked_add_pos(pos: (usize, usize), dxdy: (isize, isize)) -> Option<(usize, usize)> {
@@ -359,19 +370,22 @@ fn checked_add(u: usize, i: isize) -> Option<usize> {
 
 #[aoc(day17, part1)]
 fn solve_part1(input: &str) -> usize {
-    let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+    let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
     let output = icc.run_until_halt();
     let map_str = output.iter().map(|o| char::from(*o as u8)).collect();
     println!("{}", map_str);
     let map = parse_map(map_str);
-    map.points().filter(|point| {
-        if let Some(cells) = cells_needed_for_intersect(*point, &map) {
-            cells.iter().all(|cell| *cell == '#')
-        } else {
-            false
-        }
-    }).map(|(x, y)| x * y).sum()
+    map.points()
+        .filter(|point| {
+            if let Some(cells) = cells_needed_for_intersect(*point, &map) {
+                cells.iter().all(|cell| *cell == '#')
+            } else {
+                false
+            }
+        })
+        .map(|(x, y)| x * y)
+        .sum()
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -426,12 +440,15 @@ impl MoveWithGoodies {
         }
     }
 
-    fn forward(n: usize, previously_unseen_locations: HashSet<(usize, usize)>,
-               next_pos: (usize, usize)) -> Self {
+    fn forward(
+        n: usize,
+        previously_unseen_locations: HashSet<(usize, usize)>,
+        next_pos: (usize, usize),
+    ) -> Self {
         MoveWithGoodies {
             cmd: Move::Forward(n),
             previously_unseen_locations,
-            next_pos
+            next_pos,
         }
     }
 
@@ -469,27 +486,27 @@ impl Solver {
             match map.rows[y][x] {
                 '#' => {
                     scaffold_locations.insert((x, y));
-                },
+                }
                 '^' => {
                     facing = Direction::Up;
                     current_pos = (x, y);
                     direction_set = true;
-                },
+                }
                 'v' => {
                     facing = Direction::Down;
                     current_pos = (x, y);
                     direction_set = true;
-                },
+                }
                 '<' => {
                     facing = Direction::Left;
                     current_pos = (x, y);
                     direction_set = true;
-                },
+                }
                 '>' => {
                     facing = Direction::Right;
                     current_pos = (x, y);
                     direction_set = true;
-                },
+                }
                 '.' => (),
                 otherwise => panic!("invalid map char: {}", otherwise),
             }
@@ -513,11 +530,11 @@ impl Solver {
         }
     }
 
-    fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self>  {
+    fn shortest_path_touching_everything_at_least_once(&self) -> Option<Self> {
         let mut solver = self.clone();
         loop {
             if solver.is_complete() {
-                return Some(solver)
+                return Some(solver);
             }
 
             let next_move = solver.next_move()?;
@@ -532,8 +549,11 @@ impl Solver {
     fn go(&self, m: &MoveWithGoodies) -> Self {
         let mut next = self.clone();
         next.current_pos = m.next_pos;
-        next.unvisited_locations = self.unvisited_locations
-            .difference(&m.previously_unseen_locations).cloned().collect();
+        next.unvisited_locations = self
+            .unvisited_locations
+            .difference(&m.previously_unseen_locations)
+            .cloned()
+            .collect();
         next.facing = match m.cmd {
             Move::Forward(_) => next.facing.clone(),
             Move::TurnLeft => self.facing.turn_left(),
@@ -554,31 +574,32 @@ impl Solver {
     fn forward(&self, pos: (usize, usize), from: Direction) -> Option<MoveWithGoodies> {
         let mut previously_unseen_locations = HashSet::new();
         let (d1x, d1y) = self.d1xd1y(from);
-        (1..).into_iter().map(move |i| {
-            let dxdy = (d1x * i, d1y * i);
-            let next_pos = checked_add_pos(pos, dxdy)?;
-            if !self.scaffold_locations.contains(&next_pos) {
-                return None
-            }
-            if self.unvisited_locations.contains(&next_pos) {
-                previously_unseen_locations.insert(next_pos);
-            }
-            Some(
-                MoveWithGoodies::forward(i as usize,
-                                         previously_unseen_locations.clone(),
-                                         next_pos))
-        }).while_some()
-          .max_by_key(|move_with_goodies| {
-              move_with_goodies.num_previously_unseen_locations()
-          })
+        (1..)
+            .into_iter()
+            .map(move |i| {
+                let dxdy = (d1x * i, d1y * i);
+                let next_pos = checked_add_pos(pos, dxdy)?;
+                if !self.scaffold_locations.contains(&next_pos) {
+                    return None;
+                }
+                if self.unvisited_locations.contains(&next_pos) {
+                    previously_unseen_locations.insert(next_pos);
+                }
+                Some(MoveWithGoodies::forward(
+                    i as usize,
+                    previously_unseen_locations.clone(),
+                    next_pos,
+                ))
+            })
+            .while_some()
+            .max_by_key(|move_with_goodies| move_with_goodies.num_previously_unseen_locations())
     }
 
     fn next_move(&self) -> Option<MoveWithGoodies> {
         // if we can move forward and pick up some unseen locations, then do it
-        let forward_from_current_pos = self.forward(self.current_pos,
-                                                    self.facing);
+        let forward_from_current_pos = self.forward(self.current_pos, self.facing);
         if forward_from_current_pos.is_some() {
-            return forward_from_current_pos
+            return forward_from_current_pos;
         }
 
         // otherwise we need to turn either left or right, figure out which one
@@ -597,7 +618,7 @@ impl Solver {
 
     fn d1xd1y(&self, direction: Direction) -> (isize, isize) {
         match direction {
-            Direction::Up => (0, 1),
+            DirectioUp => (0, 1),
             Direction::Down => (0, -1),
             Direction::Left => (-1, 0),
             Direction::Right => (1, 0),
@@ -612,7 +633,9 @@ struct WindowIndex {
 
 impl WindowIndex {
     fn new() -> Self {
-        Self { starting_indeces_by_path: DefaultHashMap::new(vec![]) }
+        Self {
+            starting_indeces_by_path: DefaultHashMap::new(vec![]),
+        }
     }
 
     fn saw_window(&mut self, window: Vec<Move>, at: usize) {
@@ -620,7 +643,8 @@ impl WindowIndex {
     }
 
     fn most_effective_compression_candidates(&self) -> impl Iterator<Item = (&[Move], &[usize])> {
-        self.starting_indeces_by_path.iter()
+        self.starting_indeces_by_path
+            .iter()
             .map(|(moves, indices)| (moves.as_slice(), indices.as_slice()))
             // number of moves times number of places it occurs is kind of like an efficiency score,
             // i think technically it's a little different but this might be good enough
@@ -629,7 +653,6 @@ impl WindowIndex {
             .sorted_by_key(|(moves, indices)| moves.len() as isize * indices.len() as isize * -1)
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 enum CompressedPathElement {
@@ -656,10 +679,13 @@ impl CompressedPathElement {
 }
 
 // we can only compress into 3 functions, A, B, and C
-const NUM_FUNCTIONS : usize = 3;
+const NUM_FUNCTIONS: usize = 3;
 fn compress(path: &[Move]) -> Option<Vec<CompressedPathElement>> {
-    let mut compressed = path.iter().cloned()
-        .map(|m| CompressedPathElement::Uncompressed(m)).collect_vec();
+    let mut compressed = path
+        .iter()
+        .cloned()
+        .map(|m| CompressedPathElement::Uncompressed(m))
+        .collect_vec();
 
     for _ in 0..NUM_FUNCTIONS {
         // these are the MAGIC NUMBERS!
@@ -667,32 +693,40 @@ fn compress(path: &[Move]) -> Option<Vec<CompressedPathElement>> {
 
         let mut window_index = WindowIndex::new();
         for window_length in window_lengths {
-
             // TODO: shouldn't need to collect this...
             let compressed_enumerated = compressed.iter().enumerate().collect_vec();
             let uncompressed_windows = compressed_enumerated
                 .windows(window_length)
                 .map(|window| {
                     let (starting_index, _) = window.first().unwrap();
-                    (*starting_index, window.iter().map(|(_i, pe)| pe).collect_vec())
+                    (
+                        *starting_index,
+                        window.iter().map(|(_i, pe)| pe).collect_vec(),
+                    )
                 })
-                .filter(| (_i, window)| !contains_compressed(window.into_iter()));
+                .filter(|(_i, window)| !contains_compressed(window.into_iter()));
             for (starting_index, window) in uncompressed_windows {
                 let window = window.iter().filter_map(|cpe| cpe.as_move()).collect();
                 window_index.saw_window(window, starting_index)
             }
         }
 
-        let first_uncompressed_index = compressed.iter().enumerate().find(|(_i, cpe)| {
-            if let CompressedPathElement::Uncompressed(_) = cpe {
-                true
-            } else {
-                false
-            }
-        }).unwrap().0;
-        let (moves, indices) = window_index.most_effective_compression_candidates().filter(|(_moves, indices)| {
-            indices.contains(&first_uncompressed_index)
-        }).next()?;
+        let first_uncompressed_index = compressed
+            .iter()
+            .enumerate()
+            .find(|(_i, cpe)| {
+                if let CompressedPathElement::Uncompressed(_) = cpe {
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap()
+            .0;
+        let (moves, indices) = window_index
+            .most_effective_compression_candidates()
+            .filter(|(_moves, indices)| indices.contains(&first_uncompressed_index))
+            .next()?;
 
         let mut original = compressed.iter().enumerate().peekable();
         let mut new_compressed = vec![];
@@ -710,19 +744,21 @@ fn compress(path: &[Move]) -> Option<Vec<CompressedPathElement>> {
         compressed = new_compressed;
 
         if !still_contains_uncompressed(&compressed) {
-            return Some(compressed)
+            return Some(compressed);
         }
     }
     println!("{:?}", compressed);
-    return None
+    return None;
 }
 
-fn contains_compressed<'a>(mut compressed: impl Iterator<Item = &'a&'a&'a CompressedPathElement>) -> bool {
+fn contains_compressed<'a>(
+    mut compressed: impl Iterator<Item = &'a &'a &'a CompressedPathElement>,
+) -> bool {
     compressed.any(|cpe| {
         if let CompressedPathElement::Compressed(_) = cpe {
-            return true
+            return true;
         } else {
-            return false
+            return false;
         }
     })
 }
@@ -730,9 +766,9 @@ fn contains_compressed<'a>(mut compressed: impl Iterator<Item = &'a&'a&'a Compre
 fn still_contains_uncompressed(compressed: &[CompressedPathElement]) -> bool {
     compressed.iter().any(|cpe| {
         if let CompressedPathElement::Uncompressed(_) = cpe {
-            return true
+            return true;
         } else {
-            return false
+            return false;
         }
     })
 }
@@ -746,16 +782,20 @@ fn to_ascii(mv: &Move) -> String {
 }
 
 fn turn_into_ascii_input(compressed_path_elements: &[CompressedPathElement]) -> String {
-    let mut cpes = compressed_path_elements.into_iter()
-        .map(|cpe| Some(cpe)).collect_vec();
+    let mut cpes = compressed_path_elements
+        .into_iter()
+        .map(|cpe| Some(cpe))
+        .collect_vec();
 
     let mut main_routine = std::iter::repeat("").take(cpes.len()).collect_vec();
     let function_names = ["A", "B", "C"];
-    let mut function_by_name : HashMap<&str, &[Move]> = HashMap::with_capacity(function_names.len());
+    let mut function_by_name: HashMap<&str, &[Move]> = HashMap::with_capacity(function_names.len());
     for function_name in function_names.iter() {
         let first = cpes.iter().flatten().next().unwrap();
-        let positions = cpes.iter()
-            .positions(|cpe| cpe.as_ref() == Some(first)).collect_vec();
+        let positions = cpes
+            .iter()
+            .positions(|cpe| cpe.as_ref() == Some(first))
+            .collect_vec();
         function_by_name.insert(function_name, first.as_moves().unwrap());
         for position in positions {
             main_routine[position] = function_name;
@@ -763,15 +803,25 @@ fn turn_into_ascii_input(compressed_path_elements: &[CompressedPathElement]) -> 
         }
     }
 
-    main_routine.iter().join(",") + "\n" + &function_names.iter().map(|function_name| {
-        function_by_name.get(function_name).unwrap().iter().map(to_ascii).join(",")
-    }).join("\n")
+    main_routine.iter().join(",")
+        + "\n"
+        + &function_names
+            .iter()
+            .map(|function_name| {
+                function_by_name
+                    .get(function_name)
+                    .unwrap()
+                    .iter()
+                    .map(to_ascii)
+                    .join(",")
+            })
+            .join("\n")
 }
 
 #[aoc(day17, part2)]
 fn solve_part2(input: &str) -> i128 {
     // make a version of the map from part1, before making the program again
-    let proggy : Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+    let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
     let output = icc.run_until_halt();
     let map_str = output.iter().map(|o| char::from(*o as u8)).collect();
@@ -779,7 +829,9 @@ fn solve_part2(input: &str) -> i128 {
     let solver = Solver::from_map(&map);
 
     // solve the maze
-    let shortest_path = solver.shortest_path_touching_everything_at_least_once().unwrap();
+    let shortest_path = solver
+        .shortest_path_touching_everything_at_least_once()
+        .unwrap();
 
     // then compress the path
     let compressed = compress(&shortest_path.all_moves_so_far).unwrap();
@@ -798,7 +850,10 @@ fn solve_part2(input: &str) -> i128 {
     }
     let output = icc.run_until_halt();
     let (num_dust_collected, map_output) = output.split_last().unwrap();
-    let _map_str = map_output.iter().map(|o| char::from(*o as u8)).collect::<String>();
+    let _map_str = map_output
+        .iter()
+        .map(|o| char::from(*o as u8))
+        .collect::<String>();
     //println!("{}", map_str);
     *num_dust_collected
 }
