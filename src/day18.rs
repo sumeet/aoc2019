@@ -1,9 +1,30 @@
 //use gen_iter::GenIter;
+use chashmap::CHashMap;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPoolBuilder;
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
+
+#[derive(Debug, Clone, Hash, PartialEq)]
+struct Prefix {
+    start: char,
+    middle: BTreeSet<char>,
+    end: char,
+}
+
+impl Prefix {
+    fn one_move(start: char, end: char) -> Self {
+        Prefix {
+            start,
+            end,
+            middle: BTreeSet::new(),
+        }
+    }
+
+    fn new(start: char, middle: BTreeSet<char>, end: char) -> Self {
+        Prefix { start, middle, end }
+    }
+}
 
 #[derive(Debug, Clone)]
 struct Map {
@@ -13,7 +34,8 @@ struct Map {
     num_moves: usize,
     previously_visited: HashSet<(usize, usize)>,
     door_positions: HashMap<char, (usize, usize)>,
-    min_path_found: Arc<AtomicUsize>,
+    winner_by_prefix: Arc<CHashMap<Prefix, usize>>,
+    current_prefix: Option<Prefix>,
 }
 
 impl Map {
@@ -56,7 +78,8 @@ impl Map {
             num_moves: 0,
             previously_visited: HashSet::new(),
             door_positions,
-            min_path_found: Arc::new(AtomicUsize::new(999999)),
+            winner_by_prefix: Arc::new(CHashMap::new()),
+            current_prefix: None,
         }
     }
 
@@ -85,10 +108,15 @@ impl Map {
         self.remaining_keys.is_empty()
     }
 
-    fn go(&self, next_pos: (usize, usize), space_type: SpaceType) -> Self {
+    fn go(&self, next_pos: (usize, usize), space_type: SpaceType) -> Option<Self> {
         let mut next_map = self.clone();
+        next_map.num_moves += 1;
+        next_map.current_pos = next_pos;
+        next_map.previously_visited.insert(next_map.current_pos);
+
         match space_type {
             SpaceType::Empty => {}
+            SpaceType::Door(_) => panic!("we shouldn't filtered out doors in possible_moves()"),
             SpaceType::Key(c) => {
                 // turn the key into an empty space
                 *next_map.space_by_pos.get_mut(&next_pos).unwrap() = SpaceType::Empty;
@@ -101,36 +129,53 @@ impl Map {
                 if let Some(door_pos) = door_pos {
                     *next_map.space_by_pos.get_mut(&door_pos).unwrap() = SpaceType::Empty;
                 }
+
                 // and then clear previously visited locations, we're gonna start afresh after
                 // grabbing da key because we need to be able to go the other direction
                 next_map.previously_visited.clear();
+
+                // store the prefix information, so we can ignore less efficient searches
+                next_map.current_prefix = Some(match next_map.current_prefix {
+                    // from the puzzle input, the entrance is @
+                    None => Prefix::one_move('@', 'c'),
+                    Some(Prefix {
+                        start,
+                        mut middle,
+                        end,
+                    }) => {
+                        middle.insert(end);
+                        Prefix::new(start, middle, c)
+                    }
+                });
+
+                // if any prefixes match ours, and are faster, then bail out
+                let prefix = next_map.current_prefix.as_ref().unwrap();
+                let current_winner = next_map
+                    .winner_by_prefix
+                    .get(prefix)
+                    .map(|cw| *cw)
+                    .unwrap_or(999999);
+                if next_map.num_moves >= current_winner {
+                    println!(
+                        "dying due to prefix (winner was {}) {:?}",
+                        current_winner, prefix
+                    );
+                    return None;
+                }
+                self.winner_by_prefix
+                    .insert(prefix.clone(), next_map.num_moves);
             }
-            SpaceType::Door(_) => panic!("we shouldn't filtered out doors in possible_moves()"),
         }
-        next_map.current_pos = next_pos;
-        next_map.previously_visited.insert(next_map.current_pos);
-        next_map.num_moves += 1;
-        next_map
+
+        Some(next_map)
     }
 
     fn find_min_path(&mut self) -> Option<Self> {
-        if self.num_moves >= self.min_path_found.load(Ordering::Relaxed) {
-            return None;
-        }
-
         self.possible_moves()
             .into_par_iter()
             .filter_map(|(next_pos, space_type)| {
-                let mut next_map = self.go(next_pos, space_type);
-                if next_map.num_moves >= next_map.min_path_found.load(Ordering::Relaxed) {
-                    return None;
-                }
-
+                let mut next_map = self.go(next_pos, space_type)?;
                 if next_map.is_done() {
-                    let min = self
-                        .min_path_found
-                        .fetch_min(next_map.num_moves, Ordering::Relaxed);
-                    println!("done: {} moves (min is {})", next_map.num_moves, min);
                     Some(next_map)
                 } else {
                     next_map.find_min_path()
