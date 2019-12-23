@@ -2,6 +2,8 @@
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use rayon::ThreadPoolBuilder;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 struct Map {
@@ -11,6 +13,7 @@ struct Map {
     num_moves: usize,
     previously_visited: HashSet<(usize, usize)>,
     door_positions: HashMap<char, (usize, usize)>,
+    min_path_found: Arc<AtomicUsize>,
 }
 
 impl Map {
@@ -53,6 +56,7 @@ impl Map {
             num_moves: 0,
             previously_visited: HashSet::new(),
             door_positions,
+            min_path_found: Arc::new(AtomicUsize::new(999999)),
         }
     }
 
@@ -109,12 +113,24 @@ impl Map {
         next_map
     }
 
-    fn find_min_path(&self) -> Option<Self> {
+    fn find_min_path(&mut self) -> Option<Self> {
+        if self.num_moves >= self.min_path_found.load(Ordering::Relaxed) {
+            return None;
+        }
+
         self.possible_moves()
             .into_par_iter()
             .filter_map(|(next_pos, space_type)| {
-                let next_map = self.go(next_pos, space_type);
+                let mut next_map = self.go(next_pos, space_type);
+                if next_map.num_moves >= next_map.min_path_found.load(Ordering::Relaxed) {
+                    return None;
+                }
+
                 if next_map.is_done() {
+                    let min = self
+                        .min_path_found
+                        .fetch_min(next_map.num_moves, Ordering::Relaxed);
+                    println!("done: {} moves (min is {})", next_map.num_moves, min);
                     Some(next_map)
                 } else {
                     next_map.find_min_path()
@@ -175,7 +191,7 @@ impl SpaceType {
 
 #[aoc(day18, part1)]
 fn solve_part1(input: &str) -> usize {
-    let map = Map::parse(input);
+    let mut map = Map::parse(input);
     let pool = ThreadPoolBuilder::new()
         .stack_size(1024 * 1024 * 1000)
         .build()
