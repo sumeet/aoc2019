@@ -196,7 +196,6 @@ fn solve_part1(input: &str) -> usize {
     // need this threadpool stuff to increase stack size
     let pool = ThreadPoolBuilder::new()
         .stack_size(1024 * 1024 * 1000)
-        .breadth_first()
         .build()
         .unwrap();
     pool.install(|| {
