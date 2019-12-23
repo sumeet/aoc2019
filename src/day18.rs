@@ -192,19 +192,20 @@ impl SpaceType {
 #[aoc(day18, part1)]
 fn solve_part1(input: &str) -> usize {
     let mut map = Map::parse(input);
-    
+
     // need this threadpool stuff to increase stack size
     let pool = ThreadPoolBuilder::new()
         .stack_size(1024 * 1024 * 1000)
+        .breadth_first()
         .build()
         .unwrap();
     pool.install(|| {
         let paths = map.find_min_path();
         paths.map(|p| p.num_moves).unwrap()
     })
-    
-//    let paths = map.find_min_path();
-//    paths.unwrap().num_moves
+
+    //    let paths = map.find_min_path();
+    //    paths.unwrap().num_moves
 
     //paths.iter().map(|path| path.num_moves).min().unwrap()
     //    let destinations = map.destinations_from_current_pos(HashSet::new());
