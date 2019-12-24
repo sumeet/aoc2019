@@ -1,8 +1,11 @@
 //use gen_iter::GenIter;
 use chashmap::CHashMap;
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use itertools::Itertools;
+use pathfinding::directed::dijkstra::dijkstra;
+use rayon::prelude::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use rayon::ThreadPoolBuilder;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Hash, PartialEq)]
@@ -108,6 +111,29 @@ impl Map {
         self.remaining_keys.is_empty()
     }
 
+    fn neighbors(&self) -> impl Iterator<Item = Self> + '_ {
+        let q = Arc::new(crossbeam::queue::SegQueue::new());
+        let iterq = Arc::clone(&q);
+        q.push(self.clone());
+        std::iter::from_fn(move || iterq.pop().ok()).flat_map(move |map| {
+            let mapped_q = Arc::clone(&q);
+
+            map.possible_moves()
+                .into_par_iter()
+                .filter_map(|(next_pos, space_type)| {
+                    let q = Arc::clone(&mapped_q);
+                    let next_map = map.go(next_pos, space_type)?;
+                    if let SpaceType::Key(_) = space_type {
+                        Some(next_map)
+                    } else {
+                        q.push(next_map);
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+    }
+
     fn go(&self, next_pos: (usize, usize), space_type: SpaceType) -> Option<Self> {
         let mut next_map = self.clone();
         next_map.num_moves += 1;
@@ -149,21 +175,21 @@ impl Map {
                 });
 
                 // if any prefixes match ours, and are faster, then bail out
-                let prefix = next_map.current_prefix.as_ref().unwrap();
-                let current_winner = next_map
-                    .winner_by_prefix
-                    .get(prefix)
-                    .map(|cw| *cw)
-                    .unwrap_or(999999);
-                if next_map.num_moves >= current_winner {
-                    println!(
-                        "dying due to prefix (winner was {}) {:?}",
-                        current_winner, prefix
-                    );
-                    return None;
-                }
-                self.winner_by_prefix
-                    .insert(prefix.clone(), next_map.num_moves);
+                //                let prefix = next_map.current_prefix.as_ref().unwrap();
+                //                let current_winner = next_map
+                //                    .winner_by_prefix
+                //                    .get(prefix)
+                //                    .map(|cw| *cw)
+                //                    .unwrap_or(999999);
+                //                if next_map.num_moves >= current_winner {
+                //                    println!(
+                //                        "dying due to prefix (winner was {}) {:?}",
+                //                        current_winner, prefix
+                //                    );
+                //                    return None;
+                //                }
+                //                self.winner_by_prefix
+                //                    .insert(prefix.clone(), next_map.num_moves);
             }
         }
 
@@ -234,19 +260,73 @@ impl SpaceType {
     }
 }
 
+#[derive(Clone, Debug)]
+struct DijkstraWrapper {
+    map: Map,
+}
+
+impl DijkstraWrapper {
+    fn new(map: Map) -> Self {
+        Self { map }
+    }
+
+    fn neighbors(&self) -> impl Iterator<Item = (Self, usize)> + '_ {
+        self.map.neighbors().map(move |map| {
+            let num_moves = map.num_moves;
+            (DijkstraWrapper::new(map), num_moves)
+        })
+    }
+}
+
+impl Hash for DijkstraWrapper {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.map.current_prefix.hash(state);
+    }
+}
+
+impl PartialEq for DijkstraWrapper {
+    fn eq(&self, other: &Self) -> bool {
+        self.map.current_prefix.eq(&other.map.current_prefix)
+    }
+}
+
+impl Eq for DijkstraWrapper {}
+
 #[aoc(day18, part1)]
 fn solve_part1(input: &str) -> usize {
     let mut map = Map::parse(input);
 
+    //    for neighbor in map.neighbors() {
+    //        println!(
+    //            "{:?} ({} steps)",
+    //            neighbor.current_prefix, neighbor.num_moves
+    //        );
+    //    }
+
+    let dijkstra_wrapper = DijkstraWrapper::new(map);
+    let (path, count) = dijkstra(
+        &dijkstra_wrapper,
+        move |dw| {
+            dw.neighbors()
+                .map(|(neighbor, next_num_moves)| (neighbor, next_num_moves - dw.map.num_moves))
+                .collect_vec()
+                .into_iter()
+        },
+        move |dw| dw.map.is_done(),
+    )
+    .unwrap();
+    path.last().unwrap().map.num_moves
+    //println!("{:?}", map.neighbors().collect::<Vec<_>>());
+
     // need this threadpool stuff to increase stack size
-    let pool = ThreadPoolBuilder::new()
-        .stack_size(1024 * 1024 * 1000)
-        .build()
-        .unwrap();
-    pool.install(|| {
-        let paths = map.find_min_path();
-        paths.map(|p| p.num_moves).unwrap()
-    })
+    //    let pool = ThreadPoolBuilder::new()
+    //        .stack_size(1024 * 1024 * 1000)
+    //        .build()
+    //        .unwrap();
+    //    pool.install(|| {
+    //        let paths = map.find_min_path();
+    //        paths.map(|p| p.num_moves).unwrap()
+    //    })
 
     //    let paths = map.find_min_path();
     //    paths.unwrap().num_moves
