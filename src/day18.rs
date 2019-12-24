@@ -137,7 +137,7 @@ impl Map {
                 // store the prefix information, so we can ignore less efficient searches
                 next_map.current_prefix = Some(match next_map.current_prefix {
                     // from the puzzle input, the entrance is @
-                    None => Prefix::one_move('@', 'c'),
+                    None => Prefix::one_move('@', c),
                     Some(Prefix {
                         start,
                         mut middle,
