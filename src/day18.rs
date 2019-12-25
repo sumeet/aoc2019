@@ -2,10 +2,11 @@
 use chashmap::CHashMap;
 use itertools::Itertools;
 use pathfinding::directed::dijkstra::dijkstra;
-use rayon::prelude::{IntoParallelIterator, ParallelBridge, ParallelIterator};
-use rayon::ThreadPoolBuilder;
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Hash, PartialEq)]
@@ -37,6 +38,7 @@ struct Map {
     num_moves: usize,
     previously_visited: HashSet<(usize, usize)>,
     door_positions: HashMap<char, (usize, usize)>,
+    // we're not using this
     winner_by_prefix: Arc<CHashMap<Prefix, usize>>,
     current_prefix: Option<Prefix>,
 }
@@ -112,21 +114,23 @@ impl Map {
     }
 
     fn neighbors(&self) -> impl Iterator<Item = Self> + '_ {
-        let q = Arc::new(crossbeam::queue::SegQueue::new());
-        let iterq = Arc::clone(&q);
-        q.push(self.clone());
-        std::iter::from_fn(move || iterq.pop().ok()).flat_map(move |map| {
-            let mapped_q = Arc::clone(&q);
+        let q = Rc::new(RefCell::new(VecDeque::new()));
+        let iterq = Rc::clone(&q);
+        q.borrow_mut().push_front(self.clone());
+        std::iter::from_fn(move || iterq.borrow_mut().pop_front()).flat_map(move |map| {
+            let mapped_q = Rc::clone(&q);
 
             map.possible_moves()
                 .into_par_iter()
+                .collect::<Vec<_>>()
+                .into_iter()
                 .filter_map(|(next_pos, space_type)| {
-                    let q = Arc::clone(&mapped_q);
+                    let q = Rc::clone(&mapped_q);
                     let next_map = map.go(next_pos, space_type)?;
                     if let SpaceType::Key(_) = space_type {
                         Some(next_map)
                     } else {
-                        q.push(next_map);
+                        q.borrow_mut().push_front(next_map);
                         None
                     }
                 })
@@ -196,6 +200,7 @@ impl Map {
         Some(next_map)
     }
 
+    #[allow(unused)]
     fn find_min_path(&mut self) -> Option<Self> {
         self.possible_moves()
             .into_par_iter()
@@ -294,14 +299,7 @@ impl Eq for DijkstraWrapper {}
 
 #[aoc(day18, part1)]
 fn solve_part1(input: &str) -> usize {
-    let mut map = Map::parse(input);
-
-    //    for neighbor in map.neighbors() {
-    //        println!(
-    //            "{:?} ({} steps)",
-    //            neighbor.current_prefix, neighbor.num_moves
-    //        );
-    //    }
+    let map = Map::parse(input);
 
     let dijkstra_wrapper = DijkstraWrapper::new(map);
     let (path, count) = dijkstra(
@@ -315,7 +313,7 @@ fn solve_part1(input: &str) -> usize {
         move |dw| dw.map.is_done(),
     )
     .unwrap();
-    path.last().unwrap().map.num_moves
+    count
     //println!("{:?}", map.neighbors().collect::<Vec<_>>());
 
     // need this threadpool stuff to increase stack size
