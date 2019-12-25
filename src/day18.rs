@@ -1,17 +1,13 @@
 //use gen_iter::GenIter;
-use chashmap::CHashMap;
+use gen_iter::GenIter;
 use itertools::Itertools;
+#[allow(unused)]
 use pathfinding::directed::dijkstra::dijkstra;
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use rayon::ThreadPoolBuilder;
-use std::cell::RefCell;
-use std::cmp::Reverse;
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
-use std::sync::Arc;
 
-#[derive(Debug, Clone, Hash, PartialEq)]
+#[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
 struct Prefix {
     start: char,
     middle: BTreeSet<char>,
@@ -40,8 +36,6 @@ struct Map {
     num_moves: usize,
     previously_visited: HashSet<(usize, usize)>,
     door_positions: HashMap<char, (usize, usize)>,
-    // we're not using this
-    winner_by_prefix: Arc<CHashMap<Prefix, usize>>,
     current_prefix: Option<Prefix>,
 }
 
@@ -85,7 +79,6 @@ impl Map {
             num_moves: 0,
             previously_visited: HashSet::new(),
             door_positions,
-            winner_by_prefix: Arc::new(CHashMap::new()),
             current_prefix: None,
         }
     }
@@ -117,24 +110,23 @@ impl Map {
 
     #[allow(unused)]
     fn neighbors(&self) -> impl Iterator<Item = Self> + '_ {
-        let q = Rc::new(RefCell::new(VecDeque::new()));
-        let iterq = Rc::clone(&q);
-        q.borrow_mut().push_front(self.clone());
-        std::iter::from_fn(move || iterq.borrow_mut().pop_front()).flat_map(move |map| {
-            let mapped_q = Rc::clone(&q);
-
-            map.possible_moves()
-                .filter_map(|(next_pos, space_type)| {
-                    let q = Rc::clone(&mapped_q);
-                    let next_map = map.go(next_pos, space_type)?;
-                    if let SpaceType::Key(_) = space_type {
-                        Some(next_map)
-                    } else {
-                        q.borrow_mut().push_front(next_map);
-                        None
+        GenIter(move || {
+            let mut q = VecDeque::new();
+            q.push_front(self.clone());
+            while let Some(map) = q.pop_front() {
+                for (next_pos, space_type) in map.possible_moves().collect_vec() {
+                    let next_map = map.go(next_pos, space_type);
+                    if next_map.is_none() {
+                        continue;
                     }
-                })
-                .collect::<Vec<_>>()
+                    let next_map = next_map.unwrap();
+                    if let SpaceType::Key(_) = space_type {
+                        yield next_map;
+                    } else {
+                        q.push_front(next_map);
+                    }
+                }
+            }
         })
     }
 
@@ -179,21 +171,21 @@ impl Map {
                 });
 
                 // if any prefixes match ours, and are faster, then bail out
-                let prefix = next_map.current_prefix.as_ref().unwrap();
-                let current_winner = next_map
-                    .winner_by_prefix
-                    .get(prefix)
-                    .map(|cw| *cw)
-                    .unwrap_or(999999);
-                if next_map.num_moves >= current_winner {
-                    //                    println!(
-                    //                        "dying due to prefix (winner was {}) {:?}",
-                    //                        current_winner, prefix
-                    //                    );
-                    return None;
-                }
-                self.winner_by_prefix
-                    .insert(prefix.clone(), next_map.num_moves);
+                //                let prefix = next_map.current_prefix.as_ref().unwrap();
+                //                let current_winner = next_map
+                //                    .winner_by_prefix
+                //                    .get(prefix)
+                //                    .map(|cw| *cw)
+                //                    .unwrap_or(999999);
+                //                if next_map.num_moves >= current_winner {
+                //                    //                    println!(
+                //                    //                        "dying due to prefix (winner was {}) {:?}",
+                //                    //                        current_winner, prefix
+                //                    //                    );
+                //                    return None;
+                //                }
+                //                self.winner_by_prefix
+                //                    .insert(prefix.clone(), next_map.num_moves);
             }
         }
 
@@ -202,40 +194,41 @@ impl Map {
 
     #[allow(unused)]
     fn find_min_path(&mut self) -> Option<Self> {
-        //        self.possible_moves()
-        //            .into_par_iter()
-        //            .filter_map(|(next_pos, space_type)| {
-        //                let mut next_map = self.go(next_pos, space_type)?;
-        //                if next_map.is_done() {
-        //                    Some(next_map)
-        //                } else {
-        //                    next_map.find_min_path()
-        //                }
-        //            })
-        //            .min_by_key(|map| map.num_moves)
-        let q = Rc::new(RefCell::new(BinaryHeap::new()));
-        let iterq = Rc::clone(&q);
-        q.borrow_mut().push(DijkstraWrapper::new(self.clone()));
-        std::iter::from_fn(move || iterq.borrow_mut().pop())
-            .filter_map(move |wrapper| {
-                let q = Rc::clone(&q);
+        let mut winner_by_prefix: HashMap<Option<Prefix>, usize> = HashMap::new();
 
-                wrapper
-                    .map
-                    .possible_moves()
-                    .filter_map(|(next_pos, space_type)| {
-                        let q = Rc::clone(&q);
-                        let mut next_map = wrapper.map.go(next_pos, space_type)?;
-                        if next_map.is_done() {
-                            Some(next_map)
-                        } else {
-                            q.borrow_mut().push(DijkstraWrapper::new(next_map));
-                            None
-                        }
-                    })
-                    .min_by_key(|map| map.num_moves)
-            })
-            .min_by_key(|map| map.num_moves)
+        let mut q = BinaryHeap::new();
+        q.push(DijkstraWrapper::new(self.clone()));
+        while let Some(dw) = q.pop() {
+            for (next_pos, space_type) in dw.map.possible_moves() {
+                let mut next_map = dw.map.go(next_pos, space_type);
+                if next_map.is_none() {
+                    continue;
+                }
+
+                let next_map = next_map.unwrap();
+
+                if let SpaceType::Key(_) = space_type {
+                    // next maps where the space is a key will ALWAYS have a prefix, only the first one doesn't
+                    let prefix = &next_map.current_prefix;
+                    let current_winner = winner_by_prefix
+                        .get(prefix)
+                        .map(|cw| *cw)
+                        .unwrap_or(9999999);
+                    if next_map.num_moves > current_winner {
+                        println!("pruning smth");
+                        continue;
+                    }
+                    winner_by_prefix.insert(prefix.clone(), next_map.num_moves);
+                }
+
+                if next_map.is_done() {
+                    return Some(next_map);
+                } else {
+                    q.push(DijkstraWrapper::new(next_map))
+                }
+            }
+        }
+        None
     }
 
     //    #[allow(unused)]
@@ -321,6 +314,23 @@ impl DijkstraWrapper {
     }
 }
 
+impl Ord for DijkstraWrapper {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // order flipped to make this reverse
+        other
+            .map
+            .num_moves
+            .cmp(&self.map.num_moves)
+            .then_with(|| self.map.current_prefix.cmp(&other.map.current_prefix))
+    }
+}
+
+impl PartialOrd for DijkstraWrapper {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Hash for DijkstraWrapper {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.map.current_prefix.hash(state);
@@ -337,25 +347,25 @@ impl Eq for DijkstraWrapper {}
 
 #[aoc(day18, part1)]
 fn solve_part1(input: &str) -> usize {
-    let mut map = Map::parse(input);
+    let map = Map::parse(input);
 
-    //    let dijkstra_wrapper = DijkstraWrapper::new(map);
-    //    let (path, count) = dijkstra(
-    //        &dijkstra_wrapper,
-    //        move |dw| {
-    //            dw.neighbors()
-    //                .map(|(neighbor, next_num_moves)| (neighbor, next_num_moves - dw.map.num_moves))
-    //                .collect_vec()
-    //                .into_iter()
-    //        },
-    //        move |dw| dw.map.is_done(),
-    //    )
-    //    .unwrap();
-    //    count
+    let dijkstra_wrapper = DijkstraWrapper::new(map);
+    let (_path, count) = dijkstra(
+        &dijkstra_wrapper,
+        move |dw| {
+            dw.neighbors()
+                .map(|(neighbor, next_num_moves)| (neighbor, next_num_moves - dw.map.num_moves))
+                .collect_vec()
+                .into_iter()
+        },
+        move |dw| dw.map.is_done(),
+    )
+    .unwrap();
+    count
     //println!("{:?}", map.neighbors().collect::<Vec<_>>());
 
-    let paths = map.find_min_path();
-    paths.unwrap().num_moves
+    //    let paths = map.find_min_path();
+    ////    paths.unwrap().num_moves
 
     //paths.iter().map(|path| path.num_moves).min().unwrap()
     //    let destinations = map.destinations_from_current_pos(HashSet::new());

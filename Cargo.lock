@@ -32,7 +32,6 @@ version = "0.1.0"
 dependencies = [
  "aoc-runner 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "aoc-runner-derive 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "ascii 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "chashmap 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "colored 1.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -46,11 +45,6 @@ dependencies = [
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "ascii"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "atty"
@@ -628,7 +622,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum aoc-runner 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e34a27977323a869e1c2c1d795dd25611caafeec0d121f57bb0b7630a639cd30"
 "checksum aoc-runner-derive 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "696802dfe4dd87aa979f63a9e46ae98a31b5eb3d7aff5071de426e9bb3d1cfd2"
 "checksum aoc-runner-internal 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "274b0ba7f3669a45ec0aaacf94eb032a749de880ab776091576cca94037c9982"
-"checksum ascii 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bbf56136a5198c7b01a49e3afcbef6cf84597273d298f54432926024107b0109"
 "checksum atty 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)" = "1803c647a3ec87095e7ae7acfca019e98de5ec9a7d01343f611cf3152ed71a90"
 "checksum autocfg 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "1d49d90015b3c36167a20fe2810c5cd875ad504b39cff3d4eae7977e6b7c1cb2"
 "checksum c2-chacha 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "214238caa1bf3a496ec3392968969cab8549f96ff30652c9e56885329315f6bb"
