@@ -3,8 +3,10 @@ use chashmap::CHashMap;
 use itertools::Itertools;
 use pathfinding::directed::dijkstra::dijkstra;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use rayon::ThreadPoolBuilder;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::cmp::Reverse;
+use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -88,9 +90,9 @@ impl Map {
         }
     }
 
-    fn possible_moves(&self) -> impl IntoParallelIterator<Item = ((usize, usize), SpaceType)> + '_ {
+    fn possible_moves(&self) -> impl Iterator<Item = ((usize, usize), SpaceType)> + '_ {
         [(0, 1), (0, -1), (-1, 0), (1, 0)]
-            .into_par_iter()
+            .iter()
             .filter_map(move |dxdy| {
                 let next_pos = checked_add_pos(self.current_pos, *dxdy)?;
                 if self.previously_visited.contains(&next_pos) {
@@ -113,6 +115,7 @@ impl Map {
         self.remaining_keys.is_empty()
     }
 
+    #[allow(unused)]
     fn neighbors(&self) -> impl Iterator<Item = Self> + '_ {
         let q = Rc::new(RefCell::new(VecDeque::new()));
         let iterq = Rc::clone(&q);
@@ -121,9 +124,6 @@ impl Map {
             let mapped_q = Rc::clone(&q);
 
             map.possible_moves()
-                .into_par_iter()
-                .collect::<Vec<_>>()
-                .into_iter()
                 .filter_map(|(next_pos, space_type)| {
                     let q = Rc::clone(&mapped_q);
                     let next_map = map.go(next_pos, space_type)?;
@@ -179,21 +179,21 @@ impl Map {
                 });
 
                 // if any prefixes match ours, and are faster, then bail out
-                //                let prefix = next_map.current_prefix.as_ref().unwrap();
-                //                let current_winner = next_map
-                //                    .winner_by_prefix
-                //                    .get(prefix)
-                //                    .map(|cw| *cw)
-                //                    .unwrap_or(999999);
-                //                if next_map.num_moves >= current_winner {
-                //                    println!(
-                //                        "dying due to prefix (winner was {}) {:?}",
-                //                        current_winner, prefix
-                //                    );
-                //                    return None;
-                //                }
-                //                self.winner_by_prefix
-                //                    .insert(prefix.clone(), next_map.num_moves);
+                let prefix = next_map.current_prefix.as_ref().unwrap();
+                let current_winner = next_map
+                    .winner_by_prefix
+                    .get(prefix)
+                    .map(|cw| *cw)
+                    .unwrap_or(999999);
+                if next_map.num_moves >= current_winner {
+                    //                    println!(
+                    //                        "dying due to prefix (winner was {}) {:?}",
+                    //                        current_winner, prefix
+                    //                    );
+                    return None;
+                }
+                self.winner_by_prefix
+                    .insert(prefix.clone(), next_map.num_moves);
             }
         }
 
@@ -202,18 +202,56 @@ impl Map {
 
     #[allow(unused)]
     fn find_min_path(&mut self) -> Option<Self> {
-        self.possible_moves()
-            .into_par_iter()
-            .filter_map(|(next_pos, space_type)| {
-                let mut next_map = self.go(next_pos, space_type)?;
-                if next_map.is_done() {
-                    Some(next_map)
-                } else {
-                    next_map.find_min_path()
-                }
+        //        self.possible_moves()
+        //            .into_par_iter()
+        //            .filter_map(|(next_pos, space_type)| {
+        //                let mut next_map = self.go(next_pos, space_type)?;
+        //                if next_map.is_done() {
+        //                    Some(next_map)
+        //                } else {
+        //                    next_map.find_min_path()
+        //                }
+        //            })
+        //            .min_by_key(|map| map.num_moves)
+        let q = Rc::new(RefCell::new(BinaryHeap::new()));
+        let iterq = Rc::clone(&q);
+        q.borrow_mut().push(DijkstraWrapper::new(self.clone()));
+        std::iter::from_fn(move || iterq.borrow_mut().pop())
+            .filter_map(move |wrapper| {
+                let q = Rc::clone(&q);
+
+                wrapper
+                    .map
+                    .possible_moves()
+                    .filter_map(|(next_pos, space_type)| {
+                        let q = Rc::clone(&q);
+                        let mut next_map = wrapper.map.go(next_pos, space_type)?;
+                        if next_map.is_done() {
+                            Some(next_map)
+                        } else {
+                            q.borrow_mut().push(DijkstraWrapper::new(next_map));
+                            None
+                        }
+                    })
+                    .min_by_key(|map| map.num_moves)
             })
             .min_by_key(|map| map.num_moves)
     }
+
+    //    #[allow(unused)]
+    //    fn find_min_path_recursive(&mut self) -> Option<Self> {
+    //        self.possible_moves()
+    //            .into_par_iter()
+    //            .filter_map(|(next_pos, space_type)| {
+    //                let mut next_map = self.go(next_pos, space_type)?;
+    //                if next_map.is_done() {
+    //                    Some(next_map)
+    //                } else {
+    //                    next_map.find_min_path()
+    //                }
+    //            })
+    //            .min_by_key(|map| map.num_moves)
+    //    }
 
     //    fn find_all_paths(&self) -> Vec<Self> {
     //        let mut paths = vec![];
@@ -299,40 +337,95 @@ impl Eq for DijkstraWrapper {}
 
 #[aoc(day18, part1)]
 fn solve_part1(input: &str) -> usize {
-    let map = Map::parse(input);
+    let mut map = Map::parse(input);
 
-    let dijkstra_wrapper = DijkstraWrapper::new(map);
-    let (path, count) = dijkstra(
-        &dijkstra_wrapper,
-        move |dw| {
-            dw.neighbors()
-                .map(|(neighbor, next_num_moves)| (neighbor, next_num_moves - dw.map.num_moves))
-                .collect_vec()
-                .into_iter()
-        },
-        move |dw| dw.map.is_done(),
-    )
-    .unwrap();
-    count
+    //    let dijkstra_wrapper = DijkstraWrapper::new(map);
+    //    let (path, count) = dijkstra(
+    //        &dijkstra_wrapper,
+    //        move |dw| {
+    //            dw.neighbors()
+    //                .map(|(neighbor, next_num_moves)| (neighbor, next_num_moves - dw.map.num_moves))
+    //                .collect_vec()
+    //                .into_iter()
+    //        },
+    //        move |dw| dw.map.is_done(),
+    //    )
+    //    .unwrap();
+    //    count
     //println!("{:?}", map.neighbors().collect::<Vec<_>>());
 
-    // need this threadpool stuff to increase stack size
-    //    let pool = ThreadPoolBuilder::new()
-    //        .stack_size(1024 * 1024 * 1000)
-    //        .build()
-    //        .unwrap();
-    //    pool.install(|| {
-    //        let paths = map.find_min_path();
-    //        paths.map(|p| p.num_moves).unwrap()
-    //    })
-
-    //    let paths = map.find_min_path();
-    //    paths.unwrap().num_moves
+    let paths = map.find_min_path();
+    paths.unwrap().num_moves
 
     //paths.iter().map(|path| path.num_moves).min().unwrap()
     //    let destinations = map.destinations_from_current_pos(HashSet::new());
     //    format!("{:?}", destinations)
 }
+
+//fn change_and_divide(original_map_input: &str) -> Result<[String; 4], Box<dyn std::error::Error>> {
+//    let mut orig_entrance_pos = None;
+//    let lines = original_map_input.trim().lines();
+//    let mut new_map_input = vec![];
+//    for (y, line) in lines.enumerate() {
+//        let mut line_vec = vec![];
+//        for (x, chr) in line.chars().enumerate() {
+//            if chr == '@' {
+//                orig_entrance_pos = Some((x, y))
+//            }
+//            line_vec.push(chr);
+//        }
+//        new_map_input.push(line_vec);
+//    }
+
+//    let orig_entrance_pos = orig_entrance_pos.ok_or("didn't find entrance")?;
+
+//    // original:            should become:
+//    // ...                  @#@
+//    // .@.                  ###
+//    // ...                  @#@
+
+//    // for the @s in the corners
+//    let dxdy_for_corners = [(-1, -1), (-1, 1), (1, 1), (1, -1)];
+//    for dxdy in dxdy_for_corners.iter() {
+//        let (x, y) = checked_add_pos(orig_entrance_pos, *dxdy)
+//            .ok_or("original entrance wasn't sufficiently in the middle")?;
+//        new_map_input[y][x] = '@'
+//    }
+
+//    // for the #s in the cross pattern (clockwise)
+//    let dxdy_for_cross = [(0, 0), (-1, 0), (0, 1), (1, 0), (0, -1)];
+//    for dxdy in dxdy_for_cross.iter() {
+//        let (x, y) = checked_add_pos(orig_entrance_pos, *dxdy)
+//            .ok_or("original entrance wasn't sufficiently in the middle")?;
+//        new_map_input[y][x] = '#'
+//    }
+
+//    let top_left_corner = new_map_input[0..=orig_entrance_pos.1]
+//        .iter()
+//        .map(|line| line[0..=orig_entrance_pos.0].iter().join(""))
+//        .join("\n");
+//    println!("{}", top_left_corner);
+//    println!("");
+//    let top_right_corner = new_map_input[0..=orig_entrance_pos.1]
+//        .iter()
+//        .map(|line| line[orig_entrance_pos.0..line.len()].iter().join(""))
+//        .join("\n");
+//    println!("{}", top_right_corner);
+
+//    //    println!(
+//    //        "{}",
+//    //        new_map_input
+//    //            .into_iter()
+//    //            .map(|line| line.into_iter().join(""))
+//    //            .join("\n")
+//    //    );
+//    unimplemented!()
+//}
+
+//#[aoc(day18, part2)]
+//fn solve_part2(input: &str) -> String {
+//    change_and_divide(input).unwrap()[0].clone()
+//}
 
 #[test]
 fn e1() {
@@ -377,8 +470,8 @@ fn e3() {
 
 #[test]
 fn e4() {
-    println!(
-        "{:?}",
+    assert_eq!(
+        136,
         solve_part1(
             "#################
 #i.G..c...e..H.p#
