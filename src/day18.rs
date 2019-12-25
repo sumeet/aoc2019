@@ -215,7 +215,6 @@ impl Map {
                         .map(|cw| *cw)
                         .unwrap_or(9999999);
                     if next_map.num_moves > current_winner {
-                        println!("pruning smth");
                         continue;
                     }
                     winner_by_prefix.insert(prefix.clone(), next_map.num_moves);
