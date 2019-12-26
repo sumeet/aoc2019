@@ -51,7 +51,7 @@ struct Map {
     remaining_keys: HashSet<char>,
     space_by_pos: HashMap<(usize, usize), SpaceType>,
     num_moves: usize,
-    previously_visited_by_robot_i: Vec<HashSet<(usize, usize)>>,
+    previously_visited: HashSet<(usize, usize)>,
     door_positions: HashMap<char, (usize, usize)>,
     current_prefix: Option<Prefix>,
 }
@@ -88,16 +88,13 @@ impl Map {
                 }
             }
         }
-        let previously_visited_by_robot_i = robot_poss.iter().map(|_| HashSet::new()).collect();
-
-        println!("{:?}", robot_poss.len());
-
+        let previously_visited = HashSet::new();
         Self {
             robot_poss,
             space_by_pos,
             remaining_keys: all_keys,
             num_moves: 0,
-            previously_visited_by_robot_i,
+            previously_visited,
             door_positions,
             current_prefix: None,
         }
@@ -112,7 +109,7 @@ impl Map {
                     .iter()
                     .filter_map(move |dxdy| {
                         let next_pos = checked_add_pos(*current_pos, *dxdy)?;
-                        if self.previously_visited_by_robot_i[robot_i].contains(&next_pos) {
+                        if self.previously_visited.contains(&next_pos) {
                             return None;
                         }
                         let (_pos, space_type) = self
@@ -146,6 +143,10 @@ impl Map {
                     }
                     let next_map = next_map.unwrap();
                     if let SpaceType::Key(_) = possible_move.next_space_type {
+                        println!(
+                            "well it found a neighbor: {:?}",
+                            (&next_map.current_prefix, &next_map.num_moves)
+                        );
                         yield next_map;
                     } else {
                         q.push_back(next_map);
@@ -156,7 +157,7 @@ impl Map {
     }
 
     fn go(&self, possible_move: PossibleMove) -> Option<Self> {
-        //        println!("possible_move: {:?}", possible_move);
+        println!("possible_move: {:?}", possible_move);
         //        println!("prefix: {:?}, robot_poss: {}, remaining_keys: {}, space_by_pos: {}, previously_visited_by_roboti: {}, door_positions: {}",
         //            self.current_prefix, self.robot_poss.len(), self.remaining_keys.len(), self.space_by_pos.len(),
         //                 self.previously_visited_by_robot_i.iter().map(|hm| hm.len()).sum::<usize>(),
@@ -166,8 +167,7 @@ impl Map {
         let mut next_map = self.clone();
         next_map.num_moves += 1;
         next_map.robot_poss[possible_move.robot_index] = possible_move.next_pos;
-        next_map.previously_visited_by_robot_i[possible_move.robot_index]
-            .insert(possible_move.next_pos);
+        next_map.previously_visited.insert(possible_move.next_pos);
 
         match possible_move.next_space_type {
             SpaceType::Empty => {}
@@ -190,7 +190,7 @@ impl Map {
 
                 // and then clear previously visited locations, we're gonna start afresh after
                 // grabbing da key because we need to be able to go the other direction
-                next_map.previously_visited_by_robot_i[possible_move.robot_index].clear();
+                next_map.previously_visited.clear();
 
                 // store the prefix information, so we can ignore less efficient searches
                 next_map.current_prefix = Some(match next_map.current_prefix {
@@ -479,6 +479,12 @@ fn solve_part2(input: &str) -> usize {
     println!();
     println!("{}", input);
     let map = Map::parse(&input);
+    //    panic!(
+    //        "{:?}",
+    //        map.neighbors()
+    //            .map(|m| (m.current_prefix, m.num_moves))
+    //            .collect_vec()
+    //    );
 
     let dijkstra_wrapper = DijkstraWrapper::new(map);
     let (_path, count) = dijkstra(
