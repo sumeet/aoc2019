@@ -7,6 +7,23 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
+#[derive(Copy, Clone, Debug)]
+struct PossibleMove {
+    robot_index: usize,
+    next_pos: (usize, usize),
+    next_space_type: SpaceType,
+}
+
+impl PossibleMove {
+    fn new(robot_index: usize, next_pos: (usize, usize), next_space_type: SpaceType) -> Self {
+        Self {
+            robot_index,
+            next_pos,
+            next_space_type,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, PartialOrd, Eq, Ord)]
 struct Prefix {
     start: char,
@@ -30,18 +47,18 @@ impl Prefix {
 
 #[derive(Debug, Clone)]
 struct Map {
-    current_pos: (usize, usize),
+    robot_poss: Vec<(usize, usize)>,
     remaining_keys: HashSet<char>,
     space_by_pos: HashMap<(usize, usize), SpaceType>,
     num_moves: usize,
-    previously_visited: HashSet<(usize, usize)>,
+    previously_visited_by_robot_i: Vec<HashSet<(usize, usize)>>,
     door_positions: HashMap<char, (usize, usize)>,
     current_prefix: Option<Prefix>,
 }
 
 impl Map {
     fn parse(map_str: &str) -> Self {
-        let mut current_pos = None;
+        let mut robot_poss = vec![];
         let mut space_by_pos = HashMap::new();
         let mut all_keys = HashSet::new();
         let mut door_positions = HashMap::new();
@@ -51,7 +68,7 @@ impl Map {
                     '#' => None,
                     '.' => Some(SpaceType::Empty),
                     '@' => {
-                        current_pos = Some((x, y));
+                        robot_poss.push((x, y));
                         Some(SpaceType::Empty)
                     }
                     c if c.is_ascii_lowercase() => {
@@ -71,36 +88,44 @@ impl Map {
                 }
             }
         }
-        let current_pos = current_pos.take().unwrap();
+        let previously_visited_by_robot_i = robot_poss.iter().map(|_| HashSet::new()).collect();
+
+        println!("{:?}", robot_poss.len());
+
         Self {
-            current_pos,
+            robot_poss,
             space_by_pos,
             remaining_keys: all_keys,
             num_moves: 0,
-            previously_visited: HashSet::new(),
+            previously_visited_by_robot_i,
             door_positions,
             current_prefix: None,
         }
     }
 
-    fn possible_moves(&self) -> impl Iterator<Item = ((usize, usize), SpaceType)> + '_ {
-        [(0, 1), (0, -1), (-1, 0), (1, 0)]
+    fn possible_moves(&self) -> impl Iterator<Item = PossibleMove> + '_ {
+        self.robot_poss
             .iter()
-            .filter_map(move |dxdy| {
-                let next_pos = checked_add_pos(self.current_pos, *dxdy)?;
-                if self.previously_visited.contains(&next_pos) {
-                    return None;
-                }
-                let (pos, space_type) = self
-                    .space_by_pos
-                    .get_key_value(&next_pos)
-                    .map(|(pos, space_type)| (*pos, *space_type))?;
-                // can't go to doors, if this door was really open it wouldn't be here, we would've
-                // turned it into an empty space when we picked up the key
-                if space_type.is_door() {
-                    return None;
-                }
-                Some((pos, space_type))
+            .enumerate()
+            .flat_map(move |(robot_i, current_pos)| {
+                [(0, 1), (0, -1), (-1, 0), (1, 0)]
+                    .iter()
+                    .filter_map(move |dxdy| {
+                        let next_pos = checked_add_pos(*current_pos, *dxdy)?;
+                        if self.previously_visited_by_robot_i[robot_i].contains(&next_pos) {
+                            return None;
+                        }
+                        let (_pos, space_type) = self
+                            .space_by_pos
+                            .get_key_value(&next_pos)
+                            .map(|(pos, space_type)| (*pos, *space_type))?;
+                        // can't go to doors, if this door was really open it wouldn't be here, we would've
+                        // turned it into an empty space when we picked up the key
+                        if space_type.is_door() {
+                            return None;
+                        }
+                        Some(PossibleMove::new(robot_i, next_pos, space_type))
+                    })
             })
     }
 
@@ -113,35 +138,46 @@ impl Map {
         GenIter(move || {
             let mut q = VecDeque::new();
             q.push_front(self.clone());
-            while let Some(map) = q.pop_front() {
-                for (next_pos, space_type) in map.possible_moves().collect_vec() {
-                    let next_map = map.go(next_pos, space_type);
+            while let Some(map) = q.pop_back() {
+                for possible_move in map.possible_moves().collect_vec() {
+                    let next_map = map.go(possible_move);
                     if next_map.is_none() {
                         continue;
                     }
                     let next_map = next_map.unwrap();
-                    if let SpaceType::Key(_) = space_type {
+                    if let SpaceType::Key(_) = possible_move.next_space_type {
                         yield next_map;
                     } else {
-                        q.push_front(next_map);
+                        q.push_back(next_map);
                     }
                 }
             }
         })
     }
 
-    fn go(&self, next_pos: (usize, usize), space_type: SpaceType) -> Option<Self> {
+    fn go(&self, possible_move: PossibleMove) -> Option<Self> {
+        //        println!("possible_move: {:?}", possible_move);
+        //        println!("prefix: {:?}, robot_poss: {}, remaining_keys: {}, space_by_pos: {}, previously_visited_by_roboti: {}, door_positions: {}",
+        //            self.current_prefix, self.robot_poss.len(), self.remaining_keys.len(), self.space_by_pos.len(),
+        //                 self.previously_visited_by_robot_i.iter().map(|hm| hm.len()).sum::<usize>(),
+        //            self.door_positions.len(),
+        //        );
+
         let mut next_map = self.clone();
         next_map.num_moves += 1;
-        next_map.current_pos = next_pos;
-        next_map.previously_visited.insert(next_map.current_pos);
+        next_map.robot_poss[possible_move.robot_index] = possible_move.next_pos;
+        next_map.previously_visited_by_robot_i[possible_move.robot_index]
+            .insert(possible_move.next_pos);
 
-        match space_type {
+        match possible_move.next_space_type {
             SpaceType::Empty => {}
             SpaceType::Door(_) => panic!("we shouldn't filtered out doors in possible_moves()"),
             SpaceType::Key(c) => {
                 // turn the key into an empty space
-                *next_map.space_by_pos.get_mut(&next_pos).unwrap() = SpaceType::Empty;
+                *next_map
+                    .space_by_pos
+                    .get_mut(&possible_move.next_pos)
+                    .unwrap() = SpaceType::Empty;
 
                 // if we pick up a key here, it should have been in remaining_keys, otherwise there's
                 // a bug in the program
@@ -154,7 +190,7 @@ impl Map {
 
                 // and then clear previously visited locations, we're gonna start afresh after
                 // grabbing da key because we need to be able to go the other direction
-                next_map.previously_visited.clear();
+                next_map.previously_visited_by_robot_i[possible_move.robot_index].clear();
 
                 // store the prefix information, so we can ignore less efficient searches
                 next_map.current_prefix = Some(match next_map.current_prefix {
@@ -199,15 +235,15 @@ impl Map {
         let mut q = BinaryHeap::new();
         q.push(DijkstraWrapper::new(self.clone()));
         while let Some(dw) = q.pop() {
-            for (next_pos, space_type) in dw.map.possible_moves() {
-                let mut next_map = dw.map.go(next_pos, space_type);
+            for possible_move in dw.map.possible_moves() {
+                let mut next_map = dw.map.go(possible_move);
                 if next_map.is_none() {
                     continue;
                 }
 
                 let next_map = next_map.unwrap();
 
-                if let SpaceType::Key(_) = space_type {
+                if let SpaceType::Key(_) = possible_move.next_space_type {
                     // next maps where the space is a key will ALWAYS have a prefix, only the first one doesn't
                     let prefix = &next_map.current_prefix;
                     let current_winner = winner_by_prefix
@@ -346,6 +382,7 @@ impl Eq for DijkstraWrapper {}
 
 #[aoc(day18, part1)]
 fn solve_part1(input: &str) -> usize {
+    return 123;
     let map = Map::parse(input);
 
     let dijkstra_wrapper = DijkstraWrapper::new(map);
@@ -371,70 +408,92 @@ fn solve_part1(input: &str) -> usize {
     //    format!("{:?}", destinations)
 }
 
-//fn change_and_divide(original_map_input: &str) -> Result<[String; 4], Box<dyn std::error::Error>> {
-//    let mut orig_entrance_pos = None;
-//    let lines = original_map_input.trim().lines();
-//    let mut new_map_input = vec![];
-//    for (y, line) in lines.enumerate() {
-//        let mut line_vec = vec![];
-//        for (x, chr) in line.chars().enumerate() {
-//            if chr == '@' {
-//                orig_entrance_pos = Some((x, y))
-//            }
-//            line_vec.push(chr);
-//        }
-//        new_map_input.push(line_vec);
-//    }
+fn change_map_for_part_two(original_map_input: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let mut orig_entrance_pos = None;
+    let lines = original_map_input.trim().lines();
+    let mut new_map_input = vec![];
+    for (y, line) in lines.enumerate() {
+        let mut line_vec = vec![];
+        for (x, chr) in line.chars().enumerate() {
+            if chr == '@' {
+                orig_entrance_pos = Some((x, y))
+            }
+            line_vec.push(chr);
+        }
+        new_map_input.push(line_vec);
+    }
 
-//    let orig_entrance_pos = orig_entrance_pos.ok_or("didn't find entrance")?;
+    let orig_entrance_pos = orig_entrance_pos.ok_or("didn't find entrance")?;
 
-//    // original:            should become:
-//    // ...                  @#@
-//    // .@.                  ###
-//    // ...                  @#@
+    // original:            should become:
+    // ...                  @#@
+    // .@.                  ###
+    // ...                  @#@
 
-//    // for the @s in the corners
-//    let dxdy_for_corners = [(-1, -1), (-1, 1), (1, 1), (1, -1)];
-//    for dxdy in dxdy_for_corners.iter() {
-//        let (x, y) = checked_add_pos(orig_entrance_pos, *dxdy)
-//            .ok_or("original entrance wasn't sufficiently in the middle")?;
-//        new_map_input[y][x] = '@'
-//    }
+    // for the @s in the corners
+    let dxdy_for_corners = [(-1, -1), (-1, 1), (1, 1), (1, -1)];
+    for dxdy in dxdy_for_corners.iter() {
+        let (x, y) = checked_add_pos(orig_entrance_pos, *dxdy)
+            .ok_or("original entrance wasn't sufficiently in the middle")?;
+        new_map_input[y][x] = '@'
+    }
 
-//    // for the #s in the cross pattern (clockwise)
-//    let dxdy_for_cross = [(0, 0), (-1, 0), (0, 1), (1, 0), (0, -1)];
-//    for dxdy in dxdy_for_cross.iter() {
-//        let (x, y) = checked_add_pos(orig_entrance_pos, *dxdy)
-//            .ok_or("original entrance wasn't sufficiently in the middle")?;
-//        new_map_input[y][x] = '#'
-//    }
+    // for the #s in the cross pattern (clockwise)
+    let dxdy_for_cross = [(0, 0), (-1, 0), (0, 1), (1, 0), (0, -1)];
+    for dxdy in dxdy_for_cross.iter() {
+        let (x, y) = checked_add_pos(orig_entrance_pos, *dxdy)
+            .ok_or("original entrance wasn't sufficiently in the middle")?;
+        new_map_input[y][x] = '#'
+    }
 
-//    let top_left_corner = new_map_input[0..=orig_entrance_pos.1]
-//        .iter()
-//        .map(|line| line[0..=orig_entrance_pos.0].iter().join(""))
-//        .join("\n");
-//    println!("{}", top_left_corner);
-//    println!("");
-//    let top_right_corner = new_map_input[0..=orig_entrance_pos.1]
-//        .iter()
-//        .map(|line| line[orig_entrance_pos.0..line.len()].iter().join(""))
-//        .join("\n");
-//    println!("{}", top_right_corner);
+    Ok(new_map_input
+        .iter()
+        .map(|line| line.iter().collect::<String>())
+        .join("\n"))
 
-//    //    println!(
-//    //        "{}",
-//    //        new_map_input
-//    //            .into_iter()
-//    //            .map(|line| line.into_iter().join(""))
-//    //            .join("\n")
-//    //    );
-//    unimplemented!()
-//}
+    //    let top_left_corner = new_map_input[0..=orig_entrance_pos.1]
+    //        .iter()
+    //        .map(|line| line[0..=orig_entrance_pos.0].iter().join(""))
+    //        .join("\n");
+    //    println!("{}", top_left_corner);
+    //    println!("");
+    //    let top_right_corner = new_map_input[0..=orig_entrance_pos.1]
+    //        .iter()
+    //        .map(|line| line[orig_entrance_pos.0..line.len()].iter().join(""))
+    //        .join("\n");
+    //    println!("{}", top_right_corner);
+    //
+    //    //    println!(
+    //    //        "{}",
+    //    //        new_map_input
+    //    //            .into_iter()
+    //    //            .map(|line| line.into_iter().join(""))
+    //    //            .join("\n")
+    //    //    );
+    //    unimplemented!()
+}
 
-//#[aoc(day18, part2)]
-//fn solve_part2(input: &str) -> String {
-//    change_and_divide(input).unwrap()[0].clone()
-//}
+#[aoc(day18, part2)]
+fn solve_part2(input: &str) -> usize {
+    let input = change_map_for_part_two(input).unwrap();
+    println!();
+    println!("{}", input);
+    let map = Map::parse(&input);
+
+    let dijkstra_wrapper = DijkstraWrapper::new(map);
+    let (_path, count) = dijkstra(
+        &dijkstra_wrapper,
+        move |dw| {
+            dw.neighbors()
+                .map(|(neighbor, next_num_moves)| (neighbor, next_num_moves - dw.map.num_moves))
+                .collect_vec()
+                .into_iter()
+        },
+        move |dw| dw.map.is_done(),
+    )
+    .unwrap();
+    count
+}
 
 #[test]
 fn e1() {
