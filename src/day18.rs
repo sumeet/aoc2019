@@ -143,10 +143,6 @@ impl Map {
                     }
                     let next_map = next_map.unwrap();
                     if let SpaceType::Key(_) = possible_move.next_space_type {
-                        println!(
-                            "well it found a neighbor: {:?}",
-                            (&next_map.current_prefix, &next_map.num_moves)
-                        );
                         yield next_map;
                     } else {
                         q.push_back(next_map);
@@ -157,7 +153,6 @@ impl Map {
     }
 
     fn go(&self, possible_move: PossibleMove) -> Option<Self> {
-        println!("possible_move: {:?}", possible_move);
         //        println!("prefix: {:?}, robot_poss: {}, remaining_keys: {}, space_by_pos: {}, previously_visited_by_roboti: {}, door_positions: {}",
         //            self.current_prefix, self.robot_poss.len(), self.remaining_keys.len(), self.space_by_pos.len(),
         //                 self.previously_visited_by_robot_i.iter().map(|hm| hm.len()).sum::<usize>(),
