@@ -100,29 +100,25 @@ impl Map {
         }
     }
 
-    fn possible_moves(&self) -> impl Iterator<Item = PossibleMove> + '_ {
-        self.robot_poss
+    fn possible_moves(&self, robot_i: usize) -> impl Iterator<Item = PossibleMove> + '_ {
+        let current_pos = self.robot_poss[robot_i];
+        [(0, 1), (0, -1), (-1, 0), (1, 0)]
             .iter()
-            .enumerate()
-            .flat_map(move |(robot_i, current_pos)| {
-                [(0, 1), (0, -1), (-1, 0), (1, 0)]
-                    .iter()
-                    .filter_map(move |dxdy| {
-                        let next_pos = checked_add_pos(*current_pos, *dxdy)?;
-                        if self.previously_visited.contains(&next_pos) {
-                            return None;
-                        }
-                        let (_pos, space_type) = self
-                            .space_by_pos
-                            .get_key_value(&next_pos)
-                            .map(|(pos, space_type)| (*pos, *space_type))?;
-                        // can't go to doors, if this door was really open it wouldn't be here, we would've
-                        // turned it into an empty space when we picked up the key
-                        if space_type.is_door() {
-                            return None;
-                        }
-                        Some(PossibleMove::new(robot_i, next_pos, space_type))
-                    })
+            .filter_map(move |dxdy| {
+                let next_pos = checked_add_pos(current_pos, *dxdy)?;
+                if self.previously_visited.contains(&next_pos) {
+                    return None;
+                }
+                let (_pos, space_type) = self
+                    .space_by_pos
+                    .get_key_value(&next_pos)
+                    .map(|(pos, space_type)| (*pos, *space_type))?;
+                // can't go to doors, if this door was really open it wouldn't be here, we would've
+                // turned it into an empty space when we picked up the key
+                if space_type.is_door() {
+                    return None;
+                }
+                Some(PossibleMove::new(robot_i, next_pos, space_type))
             })
     }
 
@@ -133,19 +129,21 @@ impl Map {
     #[allow(unused)]
     fn neighbors(&self) -> impl Iterator<Item = Self> + '_ {
         GenIter(move || {
-            let mut q = VecDeque::new();
-            q.push_front(self.clone());
-            while let Some(map) = q.pop_back() {
-                for possible_move in map.possible_moves().collect_vec() {
-                    let next_map = map.go(possible_move);
-                    if next_map.is_none() {
-                        continue;
-                    }
-                    let next_map = next_map.unwrap();
-                    if let SpaceType::Key(_) = possible_move.next_space_type {
-                        yield next_map;
-                    } else {
-                        q.push_back(next_map);
+            for robot_i in 0..self.robot_poss.len() {
+                let mut q = VecDeque::new();
+                q.push_front(self.clone());
+                while let Some(map) = q.pop_back() {
+                    for possible_move in map.possible_moves(robot_i).collect_vec() {
+                        let next_map = map.go(possible_move);
+                        if next_map.is_none() {
+                            continue;
+                        }
+                        let next_map = next_map.unwrap();
+                        if let SpaceType::Key(_) = possible_move.next_space_type {
+                            yield next_map;
+                        } else {
+                            q.push_back(next_map);
+                        }
                     }
                 }
             }
@@ -230,7 +228,7 @@ impl Map {
         let mut q = BinaryHeap::new();
         q.push(DijkstraWrapper::new(self.clone()));
         while let Some(dw) = q.pop() {
-            for possible_move in dw.map.possible_moves() {
+            for possible_move in dw.map.possible_moves(unimplemented!()) {
                 let mut next_map = dw.map.go(possible_move);
                 if next_map.is_none() {
                     continue;
