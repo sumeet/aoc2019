@@ -5,27 +5,27 @@ use std::hash::{Hash, Hasher};
 use std::iter::once;
 
 #[derive(Clone)]
-struct Solver {
+struct SolverPart1 {
     map: Map,
     current_pos: Pos,
     previous_poss: HashSet<Pos>,
 }
 
-impl PartialEq for Solver {
+impl PartialEq for SolverPart1 {
     fn eq(&self, other: &Self) -> bool {
         self.current_pos == other.current_pos
     }
 }
 
-impl Eq for Solver {}
+impl Eq for SolverPart1 {}
 
-impl Hash for Solver {
+impl Hash for SolverPart1 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.current_pos.hash(state);
     }
 }
 
-impl Solver {
+impl SolverPart1 {
     fn new(map: Map) -> Self {
         let current_pos = map.entrance;
         Self {
@@ -39,7 +39,7 @@ impl Solver {
         self.current_pos == self.map.exit
     }
 
-    fn possible_moves(&self) -> Vec<Solver> {
+    fn possible_moves(&self) -> Vec<SolverPart1> {
         let mut next_solvers = [(0, 1), (0, -1), (-1, 0), (1, 0)]
             .iter()
             .filter_map(|dxdy| {
@@ -74,6 +74,8 @@ struct Map {
     blank_spaces: HashSet<Pos>,
     // portals go both ways
     portals: HashMap<Pos, Pos>,
+    inner_portals: HashSet<Pos>,
+    outer_portals: HashSet<Pos>,
     entrance: Pos,
     exit: Pos,
 }
@@ -171,11 +173,41 @@ impl Map {
             }
         }
 
+        let (portal_min_x, portal_max_x) = portals
+            .keys()
+            .map(|(x, _y)| *x)
+            .minmax()
+            .into_option()
+            .unwrap();
+        let (portal_min_y, portal_max_y) = portals
+            .keys()
+            .map(|(_x, y)| *y)
+            .minmax()
+            .into_option()
+            .unwrap();
+        let outer_portals = portals
+            .keys()
+            .cloned()
+            .filter(|pos| {
+                pos.0 == portal_min_x
+                    || pos.1 == portal_min_y
+                    || pos.0 == portal_max_x
+                    || pos.1 == portal_max_y
+            })
+            .collect::<HashSet<Pos>>();
+        let inner_portals = portals
+            .keys()
+            .cloned()
+            .filter(|pos| !outer_portals.contains(pos))
+            .collect::<HashSet<Pos>>();
+
         let entrance = **entrance.unwrap();
         let exit = **exit.unwrap();
         Self {
             blank_spaces,
             portals,
+            inner_portals,
+            outer_portals,
             entrance,
             exit,
         }
@@ -185,7 +217,7 @@ impl Map {
 #[aoc(day20, part1)]
 fn solve_part1(input: &str) -> usize {
     let map = Map::parse(input);
-    let solver = Solver::new(map);
+    let solver = SolverPart1::new(map);
     let dijkstra_result = dijkstra(
         &solver,
         |solver| {
@@ -194,7 +226,7 @@ fn solve_part1(input: &str) -> usize {
             solvers
                 .into_iter()
                 .map(|solver| (solver, cost))
-                .collect::<Vec<(Solver, usize)>>()
+                .collect::<Vec<(SolverPart1, usize)>>()
         },
         |p| p.is_done(),
     );
