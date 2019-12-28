@@ -9,7 +9,7 @@ type Dxdy = (isize, isize);
 
 #[derive(Clone)]
 struct SolverPart1 {
-    map: Map,
+    map: &'static Map,
     current_pos: Pos,
 }
 
@@ -28,7 +28,7 @@ impl Hash for SolverPart1 {
 }
 
 impl SolverPart1 {
-    fn new(map: Map) -> Self {
+    fn new(map: &'static Map) -> Self {
         let current_pos = map.entrance;
         Self { map, current_pos }
     }
@@ -65,9 +65,9 @@ impl SolverPart1 {
 
 type Level = usize;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SolverPart2 {
-    map: Map,
+    map: &'static Map,
     current_level: Level,
     current_pos: Pos,
 }
@@ -88,7 +88,7 @@ impl Hash for SolverPart2 {
 }
 
 impl SolverPart2 {
-    fn new(map: Map) -> Self {
+    fn new(map: &'static Map) -> Self {
         let current_pos = map.entrance;
         Self {
             map,
@@ -98,7 +98,7 @@ impl SolverPart2 {
     }
 
     fn is_done(&self) -> bool {
-        self.current_level == 1 && self.current_pos == self.map.exit
+        self.current_level == 0 && self.current_pos == self.map.exit
     }
 
     fn possible_moves(&self) -> Vec<SolverPart2> {
@@ -114,8 +114,7 @@ impl SolverPart2 {
 
                 // the entrance and exit are walls at anything other than level 0
                 if self.current_level != 0
-                    && self.map.entrance == next_pos
-                    && self.map.exit == next_pos
+                    && (self.map.entrance == next_pos || self.map.exit == next_pos)
                 {
                     return None;
                 }
@@ -126,14 +125,18 @@ impl SolverPart2 {
                 Some(self.go(next_pos, self.current_level))
             })
             .collect_vec();
+
         let dest_portal = self.map.portals.get(&self.current_pos);
         if let Some(dp) = dest_portal {
-            let next_level = if self.map.inner_portals.contains(dp) {
-                self.current_level + 1
-            } else if self.map.outer_portals.contains(dp) {
-                self.current_level - 1
+            let next_level = if self.map.inner_portals.contains(&self.current_pos) {
+                self.current_level.checked_add(1).unwrap()
+            } else if self.map.outer_portals.contains(&self.current_pos) {
+                self.current_level.checked_sub(1).unwrap()
             } else {
-                panic!(format!("portal {:?} wasn't in either inner or outer", dp))
+                panic!(format!(
+                    "portal {:?} wasn't in either inner or outer",
+                    self.current_pos
+                ))
             };
             next_solvers.push(self.go(*dp, next_level));
         }
@@ -141,6 +144,7 @@ impl SolverPart2 {
     }
 
     fn go(&self, next_pos: Pos, next_level: usize) -> Self {
+        //println!("going to {:?} {:?}", next_pos, next_level);
         let mut new = self.clone();
         new.current_pos = next_pos;
         new.current_level = next_level;
@@ -296,7 +300,8 @@ impl Map {
 #[aoc(day20, part1)]
 fn solve_part1(input: &str) -> usize {
     let map = Map::parse(input);
-    let solver = SolverPart1::new(map);
+    let map = Box::new(map);
+    let solver = SolverPart1::new(Box::leak(map));
     let dijkstra_result = dijkstra(
         &solver,
         |solver| {
@@ -315,7 +320,8 @@ fn solve_part1(input: &str) -> usize {
 #[aoc(day20, part2)]
 fn solve_part2(input: &str) -> usize {
     let map = Map::parse(input);
-    let solver = SolverPart2::new(map);
+    let map = Box::new(map);
+    let solver = SolverPart2::new(Box::leak(map));
     let dijkstra_result = dijkstra(
         &solver,
         |solver| {
@@ -329,4 +335,78 @@ fn solve_part2(input: &str) -> usize {
         |p| p.is_done(),
     );
     dijkstra_result.unwrap().1
+}
+
+#[test]
+fn test_p2_simple() {
+    assert_eq!(
+        solve_part2(
+            "         A           
+         A           
+  #######.#########  
+  #######.........#  
+  #######.#######.#  
+  #######.#######.#  
+  #######.#######.#  
+  #####  B    ###.#  
+BC...##  C    ###.#  
+  ##.##       ###.#  
+  ##...DE  F  ###.#  
+  #####    G  ###.#  
+  #########.#####.#  
+DE..#######...###.#  
+  #.#########.###.#  
+FG..#########.....#  
+  ###########.#####  
+             Z       
+             Z      "
+        ),
+        26
+    )
+}
+
+#[test]
+fn test_p2() {
+    assert_eq!(
+        solve_part2(
+            "             Z L X W       C                 
+             Z P Q B       K                 
+  ###########.#.#.#.#######.###############  
+  #...#.......#.#.......#.#.......#.#.#...#  
+  ###.#.#.#.#.#.#.#.###.#.#.#######.#.#.###  
+  #.#...#.#.#...#.#.#...#...#...#.#.......#  
+  #.###.#######.###.###.#.###.###.#.#######  
+  #...#.......#.#...#...#.............#...#  
+  #.#########.#######.#.#######.#######.###  
+  #...#.#    F       R I       Z    #.#.#.#  
+  #.###.#    D       E C       H    #.#.#.#  
+  #.#...#                           #...#.#  
+  #.###.#                           #.###.#  
+  #.#....OA                       WB..#.#..ZH
+  #.###.#                           #.#.#.#  
+CJ......#                           #.....#  
+  #######                           #######  
+  #.#....CK                         #......IC
+  #.###.#                           #.###.#  
+  #.....#                           #...#.#  
+  ###.###                           #.#.#.#  
+XF....#.#                         RF..#.#.#  
+  #####.#                           #######  
+  #......CJ                       NM..#...#  
+  ###.#.#                           #.###.#  
+RE....#.#                           #......RF
+  ###.###        X   X       L      #.#.#.#  
+  #.....#        F   Q       P      #.#.#.#  
+  ###.###########.###.#######.#########.###  
+  #.....#...#.....#.......#...#.....#.#...#  
+  #####.#.###.#######.#######.###.###.#.#.#  
+  #.......#.......#.#.#.#.#...#...#...#.#.#  
+  #####.###.#####.#.#.#.#.###.###.#.###.###  
+  #.......#.....#.#...#...............#...#  
+  #############.#.#.###.###################  
+               A O F   N                     
+               A A D   M                     "
+        ),
+        396
+    )
 }
