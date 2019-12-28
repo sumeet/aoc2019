@@ -4,11 +4,13 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::iter::once;
 
+type Pos = (usize, usize);
+type Dxdy = (isize, isize);
+
 #[derive(Clone)]
 struct SolverPart1 {
     map: Map,
     current_pos: Pos,
-    previous_poss: HashSet<Pos>,
 }
 
 impl PartialEq for SolverPart1 {
@@ -28,11 +30,7 @@ impl Hash for SolverPart1 {
 impl SolverPart1 {
     fn new(map: Map) -> Self {
         let current_pos = map.entrance;
-        Self {
-            map,
-            current_pos,
-            previous_poss: HashSet::new(),
-        }
+        Self { map, current_pos }
     }
 
     fn is_done(&self) -> bool {
@@ -60,14 +58,95 @@ impl SolverPart1 {
 
     fn go(&self, new_pos: Pos) -> Self {
         let mut new = self.clone();
-        new.previous_poss.insert(new.current_pos);
         new.current_pos = new_pos;
         new
     }
 }
 
-type Pos = (usize, usize);
-type Dxdy = (isize, isize);
+type Level = usize;
+
+#[derive(Clone)]
+struct SolverPart2 {
+    map: Map,
+    current_level: Level,
+    current_pos: Pos,
+}
+
+impl PartialEq for SolverPart2 {
+    fn eq(&self, other: &Self) -> bool {
+        self.current_pos == other.current_pos && self.current_level == other.current_level
+    }
+}
+
+impl Eq for SolverPart2 {}
+
+impl Hash for SolverPart2 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.current_level.hash(state);
+        self.current_pos.hash(state);
+    }
+}
+
+impl SolverPart2 {
+    fn new(map: Map) -> Self {
+        let current_pos = map.entrance;
+        Self {
+            map,
+            current_level: 0,
+            current_pos,
+        }
+    }
+
+    fn is_done(&self) -> bool {
+        self.current_level == 1 && self.current_pos == self.map.exit
+    }
+
+    fn possible_moves(&self) -> Vec<SolverPart2> {
+        let mut next_solvers = [(0, 1), (0, -1), (-1, 0), (1, 0)]
+            .iter()
+            .filter_map(|dxdy| {
+                let next_pos = checked_add_pos(self.current_pos, *dxdy)?;
+
+                // outer portals are walls at level 0
+                if self.current_level == 0 && self.map.outer_portals.contains(&next_pos) {
+                    return None;
+                }
+
+                // the entrance and exit are walls at anything other than level 0
+                if self.current_level != 0
+                    && self.map.entrance == next_pos
+                    && self.map.exit == next_pos
+                {
+                    return None;
+                }
+
+                if !self.map.blank_spaces.contains(&next_pos) {
+                    return None;
+                }
+                Some(self.go(next_pos, self.current_level))
+            })
+            .collect_vec();
+        let dest_portal = self.map.portals.get(&self.current_pos);
+        if let Some(dp) = dest_portal {
+            let next_level = if self.map.inner_portals.contains(dp) {
+                self.current_level + 1
+            } else if self.map.outer_portals.contains(dp) {
+                self.current_level - 1
+            } else {
+                panic!(format!("portal {:?} wasn't in either inner or outer", dp))
+            };
+            next_solvers.push(self.go(*dp, next_level));
+        }
+        next_solvers
+    }
+
+    fn go(&self, next_pos: Pos, next_level: usize) -> Self {
+        let mut new = self.clone();
+        new.current_pos = next_pos;
+        new.current_level = next_level;
+        new
+    }
+}
 
 #[derive(Debug, Clone)]
 struct Map {
@@ -227,6 +306,25 @@ fn solve_part1(input: &str) -> usize {
                 .into_iter()
                 .map(|solver| (solver, cost))
                 .collect::<Vec<(SolverPart1, usize)>>()
+        },
+        |p| p.is_done(),
+    );
+    dijkstra_result.unwrap().1
+}
+
+#[aoc(day20, part2)]
+fn solve_part2(input: &str) -> usize {
+    let map = Map::parse(input);
+    let solver = SolverPart2::new(map);
+    let dijkstra_result = dijkstra(
+        &solver,
+        |solver| {
+            let cost = 1;
+            let solvers = solver.possible_moves();
+            solvers
+                .into_iter()
+                .map(|solver| (solver, cost))
+                .collect::<Vec<(SolverPart2, usize)>>()
         },
         |p| p.is_done(),
     );
