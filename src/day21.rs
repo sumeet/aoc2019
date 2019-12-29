@@ -187,6 +187,7 @@ impl IntCodeComputer {
         all_output
     }
 
+    #[allow(unused)]
     fn run_and_collect_all_output(&mut self) -> (Vec<i128>, RunResult) {
         let mut all_output = vec![];
         let mut result;
@@ -315,7 +316,39 @@ impl IntCodeComputer {
 fn solve_part1(input: &str) -> usize {
     let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
-    let springscript_proggy = "NOT A J\nNOT B T\nAND T J\nNOT C T\nAND T J\nAND D J\nWALK\n";
+    let springscript_proggy = "\
+NOT C T
+NOT B J
+OR J T
+NOT A J
+OR J T
+AND D T
+OR T J
+WALK\n"
+        .trim_start();
+    for chr in springscript_proggy.chars() {
+        icc.queue_input(chr as i128)
+    }
+    let output = icc.run_until_halt();
+    let (last_chr, output) = output.split_last().unwrap();
+    println!("{}", output.iter().map(|o| (*o as u8) as char).join(""));
+    *last_chr as usize
+}
+
+#[aoc(day21, part2)]
+fn solve_part2(input: &str) -> usize {
+    let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+    let mut icc = IntCodeComputer::new(proggy);
+    let springscript_proggy = "\
+NOT C T
+NOT B J
+OR J T
+NOT A J
+OR J T
+AND D T
+OR T J
+RUN\n"
+        .trim_start();
     for chr in springscript_proggy.chars() {
         icc.queue_input(chr as i128)
     }
