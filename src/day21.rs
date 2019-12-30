@@ -317,13 +317,12 @@ fn solve_part1(input: &str) -> usize {
     let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
     let springscript_proggy = "\
-NOT C T
 NOT B J
-OR J T
-NOT A J
-OR J T
-AND D T
+NOT A T
 OR T J
+NOT C T
+OR T J
+AND D J
 WALK\n"
         .trim_start();
     for chr in springscript_proggy.chars() {
@@ -335,10 +334,18 @@ WALK\n"
     *last_chr as usize
 }
 
-#[aoc(day21, part2)]
+
+
+
+//#[aoc(day21, part2)]
+#[allow(unused)]
 fn solve_part2(input: &str) -> usize {
     let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
+    // (there is not ground on C ||
+    //  there is not ground on B ||
+    //  there is not ground on A) && there is ground on D)
+    //
     let springscript_proggy = "\
 NOT C T
 NOT B J
