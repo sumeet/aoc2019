@@ -113,6 +113,27 @@ fn solve_part1(input: &str) -> usize {
         .unwrap()
 }
 
+#[aoc(day22, part2)]
+fn solve_part2(input: &str) -> usize {
+    let mut deck = gen_cards(119315717514047);
+    for line in input.trim().lines() {
+        let shuffle = parse_shuffle(line);
+        println!("executing {:?}", shuffle);
+        deck = exec_shuffle(deck, shuffle)
+    }
+    deck.iter()
+        .enumerate()
+        .filter_map(|(i, card)| {
+            if *card == 2019 {
+                return Some(i);
+            } else {
+                None
+            }
+        })
+        .next()
+        .unwrap()
+}
+
 #[test]
 fn new_stack() {
     let cards = gen_cards(10);
