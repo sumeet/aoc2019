@@ -317,11 +317,10 @@ fn solve_part1(input: &str) -> usize {
     let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
     let springscript_proggy = "\
-NOT B J
-NOT A T
-OR T J
-NOT C T
-OR T J
+OR A J
+AND B J
+AND C J
+NOT J J
 AND D J
 WALK\n"
         .trim_start();
