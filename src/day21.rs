@@ -145,6 +145,7 @@ type Proggy = DefaultHashMap<usize, String>;
 
 #[derive(Clone)]
 struct IntCodeComputer {
+    num_instructions_processed: usize,
     proggy: Proggy,
     input: VecDeque<i128>,
     current_pos: usize,
@@ -167,6 +168,7 @@ impl IntCodeComputer {
             input: VecDeque::new(),
             current_pos: 0,
             relative_base: 0,
+            num_instructions_processed: 0,
         }
     }
 
@@ -229,6 +231,7 @@ impl IntCodeComputer {
     fn run(&mut self) -> impl Iterator<Item = RunResult> + '_ {
         std::iter::from_fn(move || loop {
             let instruction = Instruction::parse(&self.proggy[self.current_pos].to_string());
+            self.num_instructions_processed += 1;
             match instruction {
                 Add1(first_mode, second_mode, third_mode) => {
                     let param_1 = self.get_first_param(first_mode);
@@ -335,9 +338,22 @@ WALK\n"
 
 
 
+// my notes:
+//
+// D => H
+// E => I
+//
+//
+// H || (E && I) || (E && F)
+//
+//
+// T = I OR F
+// T = E && T
+// T = H || T
+//
+// H || E || I || F
 
-//#[aoc(day21, part2)]
-#[allow(unused)]
+#[aoc(day21, part2)]
 fn solve_part2(input: &str) -> usize {
     let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
     let mut icc = IntCodeComputer::new(proggy);
@@ -346,13 +362,16 @@ fn solve_part2(input: &str) -> usize {
     //  there is not ground on A) && there is ground on D)
     //
     let springscript_proggy = "\
-NOT C T
-NOT B J
-OR J T
-NOT A J
-OR J T
-AND D T
-OR T J
+OR A J
+AND B J
+AND C J
+NOT J J
+AND D J
+OR I T
+OR F T
+AND E T
+OR H T
+AND T J
 RUN\n"
         .trim_start();
     for chr in springscript_proggy.chars() {
@@ -361,5 +380,6 @@ RUN\n"
     let output = icc.run_until_halt();
     let (last_chr, output) = output.split_last().unwrap();
     println!("{}", output.iter().map(|o| (*o as u8) as char).join(""));
+    println!("num_instructions_processed: {}", icc.num_instructions_processed);
     *last_chr as usize
 }
