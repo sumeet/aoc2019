@@ -1,4 +1,3 @@
-use crate::day22::Shuffle::DealWithIncrement;
 use itertools::Itertools;
 use std::collections::VecDeque;
 
@@ -37,33 +36,37 @@ fn cut_n_cards(mut old_deck: Deck, n: isize) -> Deck {
 // should get 0
 fn wrapping_add(x: usize, y: usize, num_cards: usize) -> usize {
     let sum = x + y;
-    if sum < num_cards {
-        return sum;
-    }
-    sum - num_cards
+    let result = if sum < num_cards {
+        sum
+    } else {
+        sum - num_cards
+    };
+    result
 }
 
 fn deal_with_increment(mut old_deck: Deck, n: usize) -> Deck {
     let mut new_deck: Vec<Option<usize>> = old_deck.iter().map(|_| None).collect();
     let mut i = 0;
+    let num_cards = old_deck.len();
     while let Some(card) = old_deck.pop_front() {
         while new_deck[i].is_some() {
-            i = wrapping_add(i, 1, old_deck.len());
+            i = wrapping_add(i, 1, num_cards);
         }
         new_deck[i] = Some(card);
-        i = wrapping_add(i, n, old_deck.len());
+        i = wrapping_add(i, n, num_cards);
     }
     new_deck.into_iter().filter_map(|d| d).collect()
 }
 
 fn exec_shuffle(deck: Deck, shuffle: Shuffle) -> Deck {
     match shuffle {
-        DealWithIncrement(n) => deal_with_increment(deck, n),
+        Shuffle::DealWithIncrement(n) => deal_with_increment(deck, n),
         Shuffle::DealIntoNewStack => deal_into_new_stack(deck),
         Shuffle::Cut(n) => cut_n_cards(deck, n),
     }
 }
 
+#[derive(Debug)]
 enum Shuffle {
     DealWithIncrement(usize),
     DealIntoNewStack,
@@ -93,17 +96,26 @@ fn parse_shuffle(input: &str) -> Shuffle {
 fn solve_part1(input: &str) -> usize {
     let mut deck = gen_cards(10007);
     for line in input.trim().lines() {
-        deck = exec_shuffle(deck, parse_shuffle(line))
+        let shuffle = parse_shuffle(line);
+        println!("executing {:?}", shuffle);
+        deck = exec_shuffle(deck, shuffle)
     }
-    deck[2019]
+    deck.iter()
+        .enumerate()
+        .filter_map(|(i, card)| {
+            if *card == 2019 {
+                return Some(i);
+            } else {
+                None
+            }
+        })
+        .next()
+        .unwrap()
 }
 
 #[test]
 fn new_stack() {
     let cards = gen_cards(10);
-    let cards = deal_into_new_stack(cards);
-    let cards = deal_into_new_stack(cards);
-    //let cards = cut_n_cards(cards, 3);
-    let cards = cut_n_cards(cards, -4);
+    let cards = deal_with_increment(cards, 3);
     println!("{:?}", cards);
 }
