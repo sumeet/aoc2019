@@ -120,7 +120,7 @@ fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> 
         Shuffle::Cut(cut) => {
             let target_index = target_index as isize;
             let deck_size = deck_size as isize;
-            ((deck_size + ((cut + target_index) % deck_size)) % deck_size) as _
+            ((deck_size + cut + target_index) % deck_size) as _
         }
         _ => panic!("wwtf"),
     }
