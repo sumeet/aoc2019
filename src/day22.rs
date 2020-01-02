@@ -116,7 +116,7 @@ fn solve_part1(input: &str) -> usize {
 fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> usize {
     match shuffle {
         //        Shuffle::DealWithIncrement(_) => {},
-        //        Shuffle::DealIntoNewStack => {},
+        Shuffle::DealIntoNewStack => deck_size - target_index - 1,
         Shuffle::Cut(cut) => {
             let target_index = target_index as isize;
             let deck_size = deck_size as isize;
@@ -140,8 +140,9 @@ fn new_stack() {
 }
 
 #[test]
-fn reverse_cut() {
-    let deck = (0..10).collect_vec();
+fn reverse_ops() {
+    // CUTS (killer)
+
     // positive cuts
     // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] => cut 3 =>
     // [3, 4, 5, 6, 7, 8, 9, 0, 1, 2]
@@ -168,4 +169,18 @@ fn reverse_cut() {
     assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 7), 3);
     assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 8), 4);
     assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 9), 5);
+
+    // deal into new stack
+    // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] => deal into new stack =>
+    // [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 0), 9);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 1), 8);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 2), 7);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 3), 6);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 4), 5);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 5), 4);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 6), 3);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 7), 2);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 8), 1);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 9), 0);
 }
