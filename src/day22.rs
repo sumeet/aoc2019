@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 
 type Deck = VecDeque<usize>;
 
@@ -112,18 +112,38 @@ fn solve_part1(input: &str) -> usize {
         .unwrap()
 }
 
+fn mod_pow(mut base: usize, mut exp: usize, modulus: usize) -> usize {
+    if modulus == 1 {
+        return 0;
+    }
+    let mut result = 1;
+    base = base % modulus;
+    while exp > 0 {
+        if exp % 2 == 1 {
+            result = result * base % modulus;
+        }
+        exp = exp >> 1;
+        base = base * base % modulus
+    }
+    result
+}
+
 // returns previous index of card
 fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> usize {
     match shuffle {
+        // deal into new stack is: d - t - 1
         Shuffle::DealIntoNewStack => deck_size - target_index - 1,
+        // cut is: (d + c + t) % d
         Shuffle::Cut(cut) => {
             let target_index = target_index as isize;
             let deck_size = deck_size as isize;
             ((deck_size + cut + target_index) % deck_size) as _
         }
+        // deal with increment is: (t * ((i ** d-2) % d)) % d
+
         //badboy from https://stackoverflow.com/a/4798776
         Shuffle::DealWithIncrement(increment) => {
-            (target_index * (increment.pow((deck_size - 2) as _) % deck_size)) % deck_size
+            (target_index * mod_pow(increment, deck_size - 2, deck_size)) % deck_size
         }
     }
 }
@@ -131,7 +151,15 @@ fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> 
 #[aoc(day22, part2)]
 fn solve_part2(input: &str) -> usize {
     let shuffles = input.trim().lines().map(parse_shuffle).collect_vec();
-    123
+    //    let mut index = 4775;
+    let mut index = 2020;
+    for _ in 0..101741582076661usize {
+        for shuffle in shuffles.iter().rev() {
+            //        index = apply_in_reverse(shuffle, 10007, index);
+            index = apply_in_reverse(*shuffle, 119315717514047, index);
+        }
+    }
+    index
 }
 
 #[test]
@@ -186,10 +214,19 @@ fn reverse_ops() {
     assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 8), 1);
     assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 9), 0);
 
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 9), 0);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 8), 1);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 7), 2);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 6), 3);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 5), 4);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 4), 5);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 3), 6);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 2), 7);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 1), 8);
+    assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 0), 9);
     // deal with increment
     // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] => deal with increment 3 =>
     // [0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7]
-    println!("{:?}", deal_with_increment(gen_cards(11), 3));
     assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 11, 0), 0);
     assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 11, 1), 4);
     assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 11, 2), 8);
