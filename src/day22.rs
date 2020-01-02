@@ -115,14 +115,13 @@ fn solve_part1(input: &str) -> usize {
 // returns previous index of card
 fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> usize {
     match shuffle {
-        //        Shuffle::DealWithIncrement(_) => {},
         Shuffle::DealIntoNewStack => deck_size - target_index - 1,
         Shuffle::Cut(cut) => {
             let target_index = target_index as isize;
             let deck_size = deck_size as isize;
             ((deck_size + cut + target_index) % deck_size) as _
         }
-        _ => panic!("wwtf"),
+        Shuffle::DealWithIncrement(increment) => (increment * target_index) % deck_size,
     }
 }
 
@@ -183,4 +182,23 @@ fn reverse_ops() {
     assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 7), 2);
     assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 8), 1);
     assert_eq!(apply_in_reverse(Shuffle::DealIntoNewStack, 10, 9), 0);
+
+    // deal with increment
+    // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] => deal with increment 3 =>
+    // [0, 7, 4, 1, 8, 5, 2, 9, 6, 3]
+    // [0, ., ., 1, ., ., 2, ., ., .]
+    // this ain't reverse it's forwards... hopefully
+    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 1), 3);
+    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 2), 6);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 1), 4);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 0), 0);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 1), 7);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 2), 4);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 3), 1);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 4), 8);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 5), 5);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 6), 2);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 7), 9);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 8), 6);
+    //    assert_eq!(apply_in_reverse(Shuffle::DealWithIncrement(3), 10, 9), 3);
 }
