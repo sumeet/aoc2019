@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 type Deck = VecDeque<usize>;
 
@@ -66,7 +66,7 @@ fn exec_shuffle(deck: Deck, shuffle: Shuffle) -> Deck {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Shuffle {
     DealWithIncrement(usize),
     DealIntoNewStack,
@@ -97,7 +97,6 @@ fn solve_part1(input: &str) -> usize {
     let mut deck = gen_cards(10007);
     for line in input.trim().lines() {
         let shuffle = parse_shuffle(line);
-        println!("executing {:?}", shuffle);
         deck = exec_shuffle(deck, shuffle)
     }
     deck.iter()
@@ -113,25 +112,24 @@ fn solve_part1(input: &str) -> usize {
         .unwrap()
 }
 
+// returns previous index of card
+fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> usize {
+    match shuffle {
+        //        Shuffle::DealWithIncrement(_) => {},
+        //        Shuffle::DealIntoNewStack => {},
+        Shuffle::Cut(cut) => {
+            let target_index = target_index as isize;
+            let deck_size = deck_size as isize;
+            ((deck_size + ((cut + target_index) % deck_size)) % deck_size) as _
+        }
+        _ => panic!("wwtf"),
+    }
+}
+
 #[aoc(day22, part2)]
 fn solve_part2(input: &str) -> usize {
-    let mut deck = gen_cards(119315717514047);
-    for line in input.trim().lines() {
-        let shuffle = parse_shuffle(line);
-        println!("executing {:?}", shuffle);
-        deck = exec_shuffle(deck, shuffle)
-    }
-    deck.iter()
-        .enumerate()
-        .filter_map(|(i, card)| {
-            if *card == 2019 {
-                return Some(i);
-            } else {
-                None
-            }
-        })
-        .next()
-        .unwrap()
+    let shuffles = input.trim().lines().map(parse_shuffle).collect_vec();
+    123
 }
 
 #[test]
@@ -139,4 +137,35 @@ fn new_stack() {
     let cards = gen_cards(10);
     let cards = deal_with_increment(cards, 3);
     println!("{:?}", cards);
+}
+
+#[test]
+fn reverse_cut() {
+    let deck = (0..10).collect_vec();
+    // positive cuts
+    // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] => cut 3 =>
+    // [3, 4, 5, 6, 7, 8, 9, 0, 1, 2]
+
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 0), 3);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 1), 4);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 2), 5);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 3), 6);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 4), 7);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 5), 8);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 6), 9);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 7), 0);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 8), 1);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(3), 10, 9), 2);
+
+    // negative cuts
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 0), 6);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 1), 7);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 2), 8);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 3), 9);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 4), 0);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 5), 1);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 6), 2);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 7), 3);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 8), 4);
+    assert_eq!(apply_in_reverse(Shuffle::Cut(-4), 10, 9), 5);
 }
