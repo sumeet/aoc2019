@@ -101,9 +101,9 @@ fn solve_part1(input: &str) -> usize {
     }
     deck.iter()
         .enumerate()
-        .filter_map(|(i, card)| {
+        .filter_map(|(index, card)| {
             if *card == 2019 {
-                return Some(i);
+                return Some(index);
             } else {
                 None
             }
@@ -134,10 +134,13 @@ fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> 
         // deal into new stack is: d - t - 1
         Shuffle::DealIntoNewStack => deck_size - target_index - 1,
         // cut is: (d + c + t) % d
-        Shuffle::Cut(cut) => {
+        Shuffle::Cut(mut cut) => {
             let target_index = target_index as isize;
             let deck_size = deck_size as isize;
-            ((deck_size + cut + target_index) % deck_size) as _
+            if cut < 0 {
+                cut = deck_size + cut;
+            }
+            ((cut + target_index) % deck_size) as _
         }
         // deal with increment is: (t * ((i ** d-2) % d)) % d
 
@@ -148,24 +151,64 @@ fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> 
     }
 }
 
+// 1. t = 2020
+// 2. t = (c1 + 2020) % d
+// 3. t = (((c1 + 2020) % d) * ((i1 ** d-2) % d)) % d
+// 4. t = ((c1 + 2020) * (i1 ** d-2)) % d
+// 4- t = ((c1 + 2020) * (i1 ** d-2)) % d
+// 5. t = (c2 + (((c1 + 2020) * (i1 ** d-2)) % d)) % d
+// ^ that is confirmed working. can we simplify it?
+// YES WE CAN, tested the following in ipython:
+// 6. (((c2 + (c1 + 2020) * (pow(i1, d-2,d))) % d)) % d
+// ......
+// 8. d - 7649 - 1 => 2357
+// 9. (5785 + (d - 7649 - 1) % d)
+//10.
+
 #[aoc(day22, part2)]
 fn solve_part2(input: &str) -> usize {
     let shuffles = input.trim().lines().map(parse_shuffle).collect_vec();
-    //    let mut index = 4775;
-    let mut index = 2020;
-    for _ in 0..101741582076661usize {
-        for shuffle in shuffles.iter().rev() {
-            //        index = apply_in_reverse(shuffle, 10007, index);
-            index = apply_in_reverse(*shuffle, 119315717514047, index);
+    let deck_size = 10007;
+    let mut index = 4775;
+    let mut i = 0;
+
+    let mut c = index;
+    //    let t
+
+    for shuffle in shuffles.iter().rev() {
+        print!("{:?} ", shuffle);
+        // old solution
+        index = apply_in_reverse(*shuffle, deck_size, index);
+        print!("old: {} ", index);
+
+        // simplified solution with c variable
+        match shuffle {
+            Shuffle::DealWithIncrement(i) => c *= mod_pow(*i, deck_size - 2, deck_size),
+            Shuffle::DealIntoNewStack => c -= deck_size - 1,
+            Shuffle::Cut(mut cut) => {
+                if cut < 0 {
+                    cut = deck_size as isize + cut;
+                }
+                c += cut as usize
+            }
+        }
+        c = c % deck_size;
+        println!("new: {}", c);
+
+        i += 1;
+        if i == 10 {
+            break;
         }
     }
     index
 }
+// [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] cut 3
+// [3, 4, 5, 6, 7, 8, 9, 10, 0, 1, 2] shuffle into new deck
+// [2, 1, 0, 10, 9, 8, 7, 6, 5, 4, 3]
 
 #[test]
 fn new_stack() {
-    let cards = gen_cards(10);
-    let cards = deal_with_increment(cards, 3);
+    let cards = gen_cards(119315717514047);
     println!("{:?}", cards);
 }
 
