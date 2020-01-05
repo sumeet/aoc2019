@@ -1,3 +1,4 @@
+// also used day22.py to do some of part2
 use itertools::Itertools;
 use std::collections::VecDeque;
 
@@ -99,6 +100,7 @@ fn solve_part1(input: &str) -> usize {
         let shuffle = parse_shuffle(line);
         deck = exec_shuffle(deck, shuffle)
     }
+
     deck.iter()
         .enumerate()
         .filter_map(|(index, card)| {
@@ -165,42 +167,92 @@ fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> 
 // 9. (5785 + (d - 7649 - 1) % d)
 //10.
 
+fn gen_many_from_part1(input: &str) -> Vec<usize> {
+    let mut deck = gen_cards(10007);
+    for line in input.trim().lines() {
+        let shuffle = parse_shuffle(line);
+        deck = exec_shuffle(deck, shuffle)
+    }
+
+    let mut found_cards = vec![2019];
+    for _ in 0..8 {
+        deck.iter()
+            .enumerate()
+            .find(|(index, card)| {
+                return if *card == found_cards.last().unwrap() {
+                    found_cards.push(*index);
+                    true
+                } else {
+                    false
+                };
+            })
+            .unwrap();
+    }
+    found_cards
+}
+
 #[aoc(day22, part2)]
 fn solve_part2(input: &str) -> usize {
+    println!("{:?}", gen_many_from_part1(input));
+
     let shuffles = input.trim().lines().map(parse_shuffle).collect_vec();
     let deck_size = 10007;
-    let mut index = 4775;
-    let mut i = 0;
+    let orig_index = 4775;
 
-    let mut c = index;
-    //    let t
+    // next = (m * index) + b
+    let mut m: isize = 1;
+    let mut b: isize = 0;
 
+    let mut index = orig_index;
     for shuffle in shuffles.iter().rev() {
-        print!("{:?} ", shuffle);
         // old solution
         index = apply_in_reverse(*shuffle, deck_size, index);
-        print!("old: {} ", index);
 
-        // simplified solution with c variable
+        // simplified solution with mx + b
         match shuffle {
-            Shuffle::DealWithIncrement(i) => c *= mod_pow(*i, deck_size - 2, deck_size),
-            Shuffle::DealIntoNewStack => c -= deck_size - 1,
+            Shuffle::DealWithIncrement(increment) => {
+                b *= mod_pow(*increment, deck_size - 2, deck_size) as isize;
+                b %= deck_size as isize;
+                m *= mod_pow(*increment, deck_size - 2, deck_size) as isize;
+                m %= deck_size as isize;
+            }
             Shuffle::Cut(mut cut) => {
                 if cut < 0 {
                     cut = deck_size as isize + cut;
                 }
-                c += cut as usize
+                b += cut;
+            }
+            Shuffle::DealIntoNewStack => {
+                m *= -1;
+                b = -b + -1;
             }
         }
-        c = c % deck_size;
-        println!("new: {}", c);
-
-        i += 1;
-        if i == 10 {
-            break;
+        let new = absmod((m * orig_index as isize) + b, deck_size);
+        if index != new as usize {
+            panic!("not equal");
         }
     }
+    println!("y = mx + b, m = {}, b = {}", m, b);
+
+    // so this becomes (thanks sympy), for a particular number of iterations
+    // 7: b*m**6 + b*m**5 + b*m**4 + b*m**3 + b*m**2 + b*m + b + m**7*x
+    // 8: b*m**7 + b*m**6 + b*m**5 + b*m**4 + b*m**3 + b*m**2 + b*m + b + m**8*x
+
+    // which simplifies to (n is number of iterations):
+    // sum(b * m**k) where k is from (0, n - 1) + m ** n * x
+
+    // from sympy:
+    // In [63]: (Sum((b * m**k), (k, 0, n - 1)) + ((m ** n) * x)).evalf(subs=dict(b=80
+    //     ...: 36, m=7975, n=3)).doit().evalf(subs=dict(b=8036, m=7975, n=2, x=499))
+    //     ...: % 10007
+    // Out[63]: 2019.00000000000
+
     index
+}
+
+fn absmod(i: isize, m: usize) -> usize {
+    let m = m as isize;
+    ((i % m + m) % m) as usize
 }
 // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] cut 3
 // [3, 4, 5, 6, 7, 8, 9, 10, 0, 1, 2] shuffle into new deck
