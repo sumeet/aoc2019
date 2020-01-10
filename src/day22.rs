@@ -198,7 +198,7 @@ fn solve_part2(input: &str) -> u128 {
     println!("{:?}", gen_many_from_part1(input));
 
     let shuffles = input.trim().lines().map(parse_shuffle).collect_vec();
-    let deck_size = 10007;
+    let deck_size = 119315717514047;
     let orig_index = 4775;
 
     // next = (m * index) + b
