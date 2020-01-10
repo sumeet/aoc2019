@@ -324,15 +324,15 @@ fn interpret_output(output: Vec<i128>) -> impl Iterator<Item = (usize, i128, i12
 
 fn try_to_get_next_input_instruction(
     computers: &mut [IntCodeComputer],
-) -> impl Iterator<Item = (usize, i128, i128)> + '_ {
+) -> Option<impl Iterator<Item = (usize, i128, i128)> + '_> {
     for computer in computers {
         computer.queue_input(-1);
         let (output, _) = computer.run_and_collect_all_output();
         if output.len() > 0 {
-            return interpret_output(output);
+            return Some(interpret_output(output));
         }
     }
-    panic!("couldn't get a next input instruction")
+    None
 }
 
 #[aoc(day23, part1)]
@@ -348,13 +348,59 @@ fn solve_part1(input: &str) -> i128 {
     let mut q = VecDeque::new();
     loop {
         if q.is_empty() {
-            for packet in try_to_get_next_input_instruction(&mut computers) {
+            for packet in try_to_get_next_input_instruction(&mut computers).unwrap() {
                 q.push_back(packet);
             }
         } else {
             let (dest, x, y) = q.pop_back().unwrap();
             if dest == 255 {
                 return y;
+            }
+            computers[dest].queue_input(x);
+            computers[dest].queue_input(y);
+            let (output, _) = computers[dest].run_and_collect_all_output();
+            for packet in interpret_output(output) {
+                q.push_back(packet);
+            }
+        }
+    }
+}
+
+#[aoc(day23, part2)]
+fn solve_part2(input: &str) -> i128 {
+    let proggy: Vec<_> = input.split(",").map(|s| s.to_owned()).collect();
+    let mut computers = (0..50)
+        .map(|addr| {
+            let mut icc = IntCodeComputer::new(proggy.clone());
+            icc.queue_input(addr as i128);
+            icc
+        })
+        .collect_vec();
+    let mut nat: Vec<(i128, i128)> = vec![];
+    let mut delivered_by_nat = vec![];
+    let mut q = VecDeque::new();
+    loop {
+        if q.is_empty() {
+            match try_to_get_next_input_instruction(&mut computers) {
+                Some(packets) => {
+                    for packet in packets {
+                        q.push_back(packet);
+                    }
+                }
+                None => {
+                    let (x, y) = nat.last().unwrap().clone();
+                    if !delivered_by_nat.is_empty() && delivered_by_nat.last().unwrap() == &y {
+                        return y;
+                    }
+                    delivered_by_nat.push(y);
+                    q.push_back((0, x, y));
+                }
+            }
+        } else {
+            let (dest, x, y) = q.pop_back().unwrap();
+            if dest == 255 {
+                nat.push((x, y));
+                continue;
             }
             computers[dest].queue_input(x);
             computers[dest].queue_input(y);
