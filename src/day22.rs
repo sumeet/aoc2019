@@ -2,9 +2,9 @@
 use itertools::Itertools;
 use std::collections::VecDeque;
 
-type Deck = VecDeque<usize>;
+type Deck = VecDeque<u128>;
 
-fn gen_cards(n: usize) -> Deck {
+fn gen_cards(n: u128) -> Deck {
     (0..n).collect()
 }
 
@@ -16,7 +16,7 @@ fn deal_into_new_stack(mut old_deck: Deck) -> Deck {
     new_deck
 }
 
-fn cut_n_cards(mut old_deck: Deck, n: isize) -> Deck {
+fn cut_n_cards(mut old_deck: Deck, n: i128) -> Deck {
     if n >= 0 {
         for _ in 0..n {
             let card = old_deck.pop_front().unwrap();
@@ -35,7 +35,7 @@ fn cut_n_cards(mut old_deck: Deck, n: isize) -> Deck {
 // 0 1 2 3 4 5
 // at 4, and want to add 2
 // should get 0
-fn wrapping_add(x: usize, y: usize, num_cards: usize) -> usize {
+fn wrapping_add(x: u128, y: u128, num_cards: u128) -> u128 {
     let sum = x + y;
     let result = if sum < num_cards {
         sum
@@ -45,16 +45,16 @@ fn wrapping_add(x: usize, y: usize, num_cards: usize) -> usize {
     result
 }
 
-fn deal_with_increment(mut old_deck: Deck, n: usize) -> Deck {
-    let mut new_deck: Vec<Option<usize>> = old_deck.iter().map(|_| None).collect();
+fn deal_with_increment(mut old_deck: Deck, n: u128) -> Deck {
+    let mut new_deck: Vec<Option<u128>> = old_deck.iter().map(|_| None).collect();
     let mut i = 0;
     let num_cards = old_deck.len();
     while let Some(card) = old_deck.pop_front() {
-        while new_deck[i].is_some() {
-            i = wrapping_add(i, 1, num_cards);
+        while new_deck[i as usize].is_some() {
+            i = wrapping_add(i, 1, num_cards as u128);
         }
-        new_deck[i] = Some(card);
-        i = wrapping_add(i, n, num_cards);
+        new_deck[i as usize] = Some(card);
+        i = wrapping_add(i, n, num_cards as u128);
     }
     new_deck.into_iter().filter_map(|d| d).collect()
 }
@@ -69,9 +69,9 @@ fn exec_shuffle(deck: Deck, shuffle: Shuffle) -> Deck {
 
 #[derive(Debug, Clone, Copy)]
 enum Shuffle {
-    DealWithIncrement(usize),
+    DealWithIncrement(u128),
     DealIntoNewStack,
-    Cut(isize),
+    Cut(i128),
 }
 
 fn parse_shuffle(input: &str) -> Shuffle {
@@ -114,7 +114,7 @@ fn solve_part1(input: &str) -> usize {
         .unwrap()
 }
 
-fn mod_pow(mut base: usize, mut exp: usize, modulus: usize) -> usize {
+fn mod_pow(mut base: u128, mut exp: u128, modulus: u128) -> u128 {
     if modulus == 1 {
         return 0;
     }
@@ -131,14 +131,14 @@ fn mod_pow(mut base: usize, mut exp: usize, modulus: usize) -> usize {
 }
 
 // returns previous index of card
-fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> usize {
+fn apply_in_reverse(shuffle: Shuffle, deck_size: u128, target_index: u128) -> u128 {
     match shuffle {
         // deal into new stack is: d - t - 1
         Shuffle::DealIntoNewStack => deck_size - target_index - 1,
         // cut is: (d + c + t) % d
         Shuffle::Cut(mut cut) => {
-            let target_index = target_index as isize;
-            let deck_size = deck_size as isize;
+            let target_index = target_index as i128;
+            let deck_size = deck_size as i128;
             if cut < 0 {
                 cut = deck_size + cut;
             }
@@ -167,7 +167,7 @@ fn apply_in_reverse(shuffle: Shuffle, deck_size: usize, target_index: usize) -> 
 // 9. (5785 + (d - 7649 - 1) % d)
 //10.
 
-fn gen_many_from_part1(input: &str) -> Vec<usize> {
+fn gen_many_from_part1(input: &str) -> Vec<u128> {
     let mut deck = gen_cards(10007);
     for line in input.trim().lines() {
         let shuffle = parse_shuffle(line);
@@ -180,7 +180,7 @@ fn gen_many_from_part1(input: &str) -> Vec<usize> {
             .enumerate()
             .find(|(index, card)| {
                 return if *card == found_cards.last().unwrap() {
-                    found_cards.push(*index);
+                    found_cards.push(*index as u128);
                     true
                 } else {
                     false
@@ -191,8 +191,10 @@ fn gen_many_from_part1(input: &str) -> Vec<usize> {
     found_cards
 }
 
+// y = m (x) + b
+
 #[aoc(day22, part2)]
-fn solve_part2(input: &str) -> usize {
+fn solve_part2(input: &str) -> u128 {
     println!("{:?}", gen_many_from_part1(input));
 
     let shuffles = input.trim().lines().map(parse_shuffle).collect_vec();
@@ -200,8 +202,8 @@ fn solve_part2(input: &str) -> usize {
     let orig_index = 4775;
 
     // next = (m * index) + b
-    let mut m: isize = 1;
-    let mut b: isize = 0;
+    let mut m: i128 = 1;
+    let mut b: i128 = 0;
 
     let mut index = orig_index;
     for shuffle in shuffles.iter().rev() {
@@ -211,14 +213,14 @@ fn solve_part2(input: &str) -> usize {
         // simplified solution with mx + b
         match shuffle {
             Shuffle::DealWithIncrement(increment) => {
-                b *= mod_pow(*increment, deck_size - 2, deck_size) as isize;
-                b %= deck_size as isize;
-                m *= mod_pow(*increment, deck_size - 2, deck_size) as isize;
-                m %= deck_size as isize;
+                b *= mod_pow(*increment, deck_size - 2, deck_size) as i128;
+                b %= deck_size as i128;
+                m *= mod_pow(*increment, deck_size - 2, deck_size) as i128;
+                m %= deck_size as i128;
             }
             Shuffle::Cut(mut cut) => {
                 if cut < 0 {
-                    cut = deck_size as isize + cut;
+                    cut = deck_size as i128 + cut;
                 }
                 b += cut;
             }
@@ -227,32 +229,18 @@ fn solve_part2(input: &str) -> usize {
                 b = -b + -1;
             }
         }
-        let new = absmod((m * orig_index as isize) + b, deck_size);
-        if index != new as usize {
+        let new = absmod((m * orig_index as i128) + b, deck_size);
+        if index != new as u128 {
             panic!("not equal");
         }
     }
     println!("y = mx + b, m = {}, b = {}", m, b);
-
-    // so this becomes (thanks sympy), for a particular number of iterations
-    // 7: b*m**6 + b*m**5 + b*m**4 + b*m**3 + b*m**2 + b*m + b + m**7*x
-    // 8: b*m**7 + b*m**6 + b*m**5 + b*m**4 + b*m**3 + b*m**2 + b*m + b + m**8*x
-
-    // which simplifies to (n is number of iterations):
-    // sum(b * m**k) where k is from (0, n - 1) + m ** n * x
-
-    // from sympy:
-    // In [63]: (Sum((b * m**k), (k, 0, n - 1)) + ((m ** n) * x)).evalf(subs=dict(b=80
-    //     ...: 36, m=7975, n=3)).doit().evalf(subs=dict(b=8036, m=7975, n=2, x=499))
-    //     ...: % 10007
-    // Out[63]: 2019.00000000000
-
-    index
+    123
 }
 
-fn absmod(i: isize, m: usize) -> usize {
-    let m = m as isize;
-    ((i % m + m) % m) as usize
+fn absmod(i: i128, m: u128) -> u128 {
+    let m = m as i128;
+    ((i % m + m) % m) as u128
 }
 // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] cut 3
 // [3, 4, 5, 6, 7, 8, 9, 10, 0, 1, 2] shuffle into new deck

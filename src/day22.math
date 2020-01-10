@@ -1,0 +1,16 @@
+/*((sum b * m**k, k = 0 to n - 1) + (m**n*x)) mod c*/
+  /*=>*/
+/*((b (m^n - 1))/(m - 1) + x m^n) mod c*/
+ /*=>*/
+/*((((b (m^n - 1))/(m - 1)) mod c) + ((x m^n) mod c)) mod c*/
+
+working:
+
+(((b * (pow(m, n) - 1)) / (m - 1)) + (x * pow(m, n))) % c
+In [35]: (((b * (pow(m, n) - 1)) / (m - 1)) + (x % c * pow(m, n, c))) % c
+Out[35]: 2019.0
+
+In [36]: ( (((b * (pow(m, n) - 1)) / (m - 1)) % c) + (x % c * pow(m, n, c))) % c
+Out[36]: 2019.0
+
+( ((b * (pow(m, n) - 1) * (1 / (m - 1))) % c) + (x % c * pow(m, n, c))) % c

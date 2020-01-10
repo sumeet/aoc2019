@@ -1,35 +1,40 @@
-from sympy import symbols
-from sympy import Sum
+from sympy import Mod, Add, Symbol, Pow, Integer, Mul
+from sympy import init_printing
 
-m, x, b, d, n, k = symbols('m x b d n k')
+OldMod = Mod
+OldAdd = Add
+OldPow = Pow
+OldMul = Mul
 
-#x = x
-#for i in range(10):
-    #print(f'{i}: {x.expand()}')
-    #x = (m*x) + b
+def Mod(*args, **kwargs):
+    return OldMod(*args, **kwargs, evaluate=False)
+def Add(*args, **kwargs):
+    return OldAdd(*args, **kwargs, evaluate=False)
+def Pow(*args, **kwargs):
+    return OldPow(*args, **kwargs, evaluate=False)
+def Mul(*args, **kwargs):
+    return OldMul(*args, **kwargs, evaluate=False)
 
-num_iterations = 2
-num_cards = 10007
-target = 499
+init_printing()
 
-expr = (Sum((b * m**k), (k, 0, n - 1)) + ((m ** n) * x))
-print(expr.doit())
-result = expr.evalf(subs=dict(b=8036, m=7975, n=num_iterations, x=target))
-
-# a different approach (gotten from simplifying the guy)
-alt = ((b * ((1 - m**n)/(1 - m))) + m**n*x).evalf(subs=(dict(b=8036, m=7975, n=num_iterations, x=target)))
-
-print(result % num_cards)
-print('alt:')
-print(alt % num_cards)
-exit()
-
-# that was just the test, now for the real thing:
-
-num_iterations = 101741582076661
-num_cards = 119315717514047
-target = 2020
-
-alt = ((b * ((1 - m**n)/(1 - m))) + m**n*x).evalf(subs=(dict(b=8036, m=7975, n=num_iterations, x=target)))
-print('real answer:')
-print(alt % num_cards)
+e = Mod(
+        Add(
+            Mod(
+                Mul(
+                    Mod(Symbol('b'), Symbol('c')),
+                    Mod(Pow(Add(Symbol('m'), Integer(-1)), Integer(-1)), Symbol('c')),
+                    Mod(Add(Pow(Symbol('m'), Symbol('n')), Integer(-1)), Symbol('c')),
+                ),
+                Symbol('c')
+            ),
+            Mod(
+                Mul(
+                    Mod(Pow(Symbol('m'), Symbol('n')), Symbol('c')),
+                    Mod(Symbol('x'), Symbol('c')),
+                ),
+                Symbol('c')
+            ),
+        ),
+    Symbol('c'))
+print(e)
+print(e.evalf(subs=dict(b=8036, x=499, n=2, m=7975, c=10007)))
