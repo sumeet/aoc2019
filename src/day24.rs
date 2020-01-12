@@ -20,10 +20,28 @@ enum LazyMap {
 }
 
 type Pos = (usize, usize);
-type Map = BTreeMap<Pos, Space>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct Map {
+    this_map: BTreeMap<Pos, Space>,
+    prev_map: Option<Box<Map>>,
+}
+
+impl Map {
+    fn new(this_map: BTreeMap<Pos, Space>) -> Self {
+        Self {
+            this_map,
+            prev_map: None,
+        }
+    }
+
+    fn get(&self, pos: &Pos) -> Option<&Space> {
+        self.this_map.get(pos)
+    }
+}
 
 fn parse_part1(input: &str) -> Map {
-    let mut map = Map::new();
+    let mut map = BTreeMap::new();
     for (y, line) in input.trim().lines().enumerate() {
         for (x, space) in line.chars().enumerate() {
             match space {
@@ -33,11 +51,11 @@ fn parse_part1(input: &str) -> Map {
             };
         }
     }
-    map
+    Map::new(map)
 }
 
 fn parse_part2(input: &str) -> Map {
-    let mut map = Map::new();
+    let mut map = BTreeMap::new();
     for (y, line) in input.trim().lines().enumerate() {
         for (x, space) in line.chars().enumerate() {
             match (x, y, space) {
@@ -48,7 +66,7 @@ fn parse_part2(input: &str) -> Map {
             };
         }
     }
-    map
+    Map::new(map)
 }
 
 const ADJACENT_DXDYS: [(isize, isize); 4] = [(-1, 0), (1, 0), (0, 1), (0, -1)];
@@ -65,7 +83,8 @@ fn adjacent_tiles(map: &Map, pos: Pos) -> impl Iterator<Item = Space> + '_ {
 }
 
 fn num_total_bugs(map: &Map) -> usize {
-    map.iter()
+    map.this_map
+        .iter()
         .map(|(_, space)| match space {
             Space::Empty => 0,
             Space::Bug => 1,
@@ -99,6 +118,7 @@ fn checked_add(u: usize, i: isize) -> Option<usize> {
     }
 }
 
+#[allow(unused)]
 fn draw(map: &Map) -> String {
     (0..5)
         .map(|y| {
@@ -114,7 +134,8 @@ fn draw(map: &Map) -> String {
 }
 
 fn biodiversity(map: &Map) -> usize {
-    map.iter()
+    map.this_map
+        .iter()
         .map(|(pos, space)| match space {
             Space::Empty => 0,
             Space::Map(_) => panic!("can't calculate biodiversity of recursive map"),
@@ -128,7 +149,9 @@ fn biodiversity(map: &Map) -> usize {
 }
 
 fn generation(map: &Map) -> Map {
-    map.iter()
+    let next_map = map
+        .this_map
+        .iter()
         .map(|(pos, space)| {
             let num_adj_bugs = num_adjacent_bugs(map, *pos);
             let space = match space {
@@ -144,7 +167,8 @@ fn generation(map: &Map) -> Map {
             };
             (*pos, space)
         })
-        .collect()
+        .collect();
+    Map::new(next_map)
 }
 
 #[aoc(day24, part1)]
