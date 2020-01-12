@@ -6,11 +6,11 @@ use std::collections::{BTreeMap, HashSet};
 enum Space {
     Empty,
     Bug,
-    Map(LazyMap),
+    Map(InnerMap),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum LazyMap {
+enum InnerMap {
     Map(Map),
     None,
 }
@@ -20,14 +20,24 @@ type Pos = (usize, usize);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Map {
     this_map: BTreeMap<Pos, Space>,
-    prev_map: Option<Box<Map>>,
+    parent_map: Option<Box<Map>>,
 }
 
 impl Map {
     fn new(this_map: BTreeMap<Pos, Space>) -> Self {
         Self {
             this_map,
-            prev_map: None,
+            parent_map: None,
+        }
+    }
+
+    fn inner_of(outer_map: &Map) -> Self {
+        let mut new_empty_map = (0..5)
+            .flat_map(|x| (0..5).map(move |y| ((x, y), Space::Empty)))
+            .collect();
+        Self {
+            parent_map: Some(Box::new(outer_map.clone())),
+            this_map: new_empty_map,
         }
     }
 
@@ -55,7 +65,7 @@ fn parse_part2(input: &str) -> Map {
     for (y, line) in input.trim().lines().enumerate() {
         for (x, space) in line.chars().enumerate() {
             match (x, y, space) {
-                (2, 2, _) => map.insert((x, y), Space::Map(LazyMap::None)),
+                (2, 2, _) => map.insert((x, y), Space::Map(InnerMap::None)),
                 (_, _, '#') => map.insert((x, y), Space::Bug),
                 (_, _, '.') => map.insert((x, y), Space::Empty),
                 otherwise => panic!(format!("didn't expect {:?}", otherwise)),
@@ -72,14 +82,67 @@ fn adjacent_tiles(map: &Map, pos: Pos) -> impl Iterator<Item = Space> + '_ {
         for dxdy in &ADJACENT_DXDYS {
             let adj_pos = add_pos(pos, *dxdy);
             match adj_pos {
-                (x, y) if x < 0 || y < 0 || x > 4 || y > 4 => {
-                    yield Space::Empty;
+                // off the left hand side, square number 12
+                (x, _y) if x < 0 => {
+                    if map.parent_map.is_none() {
+                        yield Space::Empty;
+                    } else {
+                        yield map
+                            .parent_map
+                            .as_ref()
+                            .unwrap()
+                            .get(&(1, 2))
+                            .cloned()
+                            .unwrap()
+                    }
+                }
+                // off the top, going to square #8
+                (_x, y) if y < 0 => {
+                    if map.parent_map.is_none() {
+                        yield Space::Empty;
+                    } else {
+                        yield map
+                            .parent_map
+                            .as_ref()
+                            .unwrap()
+                            .get(&(2, 1))
+                            .cloned()
+                            .unwrap()
+                    }
+                }
+                // off the right hand side, going to square #14
+                (x, _y) if x > 4 => {
+                    if map.parent_map.is_none() {
+                        yield Space::Empty;
+                    } else {
+                        yield map
+                            .parent_map
+                            .as_ref()
+                            .unwrap()
+                            .get(&(3, 2))
+                            .cloned()
+                            .unwrap()
+                    }
+                }
+                // off bottom side, going to square #18
+                (x, y) if y > 4 => {
+                    if map.parent_map.is_none() {
+                        yield Space::Empty;
+                    } else {
+                        yield map
+                            .parent_map
+                            .as_ref()
+                            .unwrap()
+                            .get(&(2, 3))
+                            .cloned()
+                            .unwrap()
+                    }
                 }
                 (x, y) => {
                     let space = map.get(&(x as _, y as _)).cloned().unwrap();
                     match space {
-                        Space::Map(LazyMap::None) => yield Space::Empty,
-                        Space::Map(LazyMap::Map(inner_map)) => match square_number(pos) {
+                        Space::Map(InnerMap::None) => yield Space::Empty,
+                        Space::Map(InnerMap::Map(inner_map)) => match square_number(pos) {
                             8 => {
                                 // the top row
                                 for i in 0..5 {
@@ -123,8 +186,8 @@ fn num_total_bugs(map: &Map) -> usize {
         .map(|(_, space)| match space {
             Space::Empty => 0,
             Space::Bug => 1,
-            Space::Map(LazyMap::Map(inner_map)) => num_total_bugs(inner_map),
-            Space::Map(LazyMap::None) => 0,
+            Space::Map(InnerMap::Map(inner_map)) => num_total_bugs(inner_map),
+            Space::Map(InnerMap::None) => 0,
         })
         .sum()
 }
@@ -184,7 +247,13 @@ fn generation(map: &Map) -> Map {
         .map(|(pos, space)| {
             let num_adj_bugs = num_adjacent_bugs(map, *pos);
             let space = match space {
-                Space::Map(_) => unimplemented!(),
+                Space::Map(InnerMap::None) => {
+                    let new_inner_map = Map::inner_of(map);
+                    Space::Map(InnerMap::Map(generation(&new_inner_map)))
+                }
+                Space::Map(InnerMap::Map(inner_map)) => {
+                    Space::Map(InnerMap::Map(generation(inner_map)))
+                }
                 Space::Bug => match num_adj_bugs {
                     1 => Space::Bug,
                     _ => Space::Empty,
@@ -211,6 +280,15 @@ fn solve_part1(input: &str) -> usize {
             return biodiversity(&map);
         }
     }
+}
+
+#[aoc(day24, part2)]
+fn solve_part2(input: &str) -> usize {
+    let mut map = parse_part2(input);
+    for _ in 0..200 {
+        map = generation(&map);
+    }
+    num_total_bugs(&map)
 }
 
 #[test]
