@@ -1,7 +1,3 @@
-//    0 1 2 3 4
-// 0: 0 1 2 3 4
-// 1: 5 6 7 8 9
-
 use gen_iter::GenIter;
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashSet};
@@ -74,10 +70,49 @@ const ADJACENT_DXDYS: [(isize, isize); 4] = [(-1, 0), (1, 0), (0, 1), (0, -1)];
 fn adjacent_tiles(map: &Map, pos: Pos) -> impl Iterator<Item = Space> + '_ {
     GenIter(move || {
         for dxdy in &ADJACENT_DXDYS {
-            yield checked_add_pos(pos, *dxdy)
-                .and_then(|adj_pos| map.get(&adj_pos))
-                .cloned()
-                .unwrap_or(Space::Empty);
+            let adj_pos = add_pos(pos, *dxdy);
+            match adj_pos {
+                (x, y) if x < 0 || y < 0 || x > 4 || y > 4 => {
+                    yield Space::Empty;
+                }
+                (x, y) => {
+                    let space = map.get(&(x as _, y as _)).cloned().unwrap();
+                    match space {
+                        Space::Map(LazyMap::None) => yield Space::Empty,
+                        Space::Map(LazyMap::Map(inner_map)) => match square_number(pos) {
+                            8 => {
+                                // the top row
+                                for i in 0..5 {
+                                    yield inner_map.get(&(i, 0)).cloned().unwrap();
+                                }
+                            }
+                            12 => {
+                                // the left column
+                                for i in 0..5 {
+                                    yield inner_map.get(&(0, i)).cloned().unwrap();
+                                }
+                            }
+                            14 => {
+                                // the right column
+                                for i in 0..5 {
+                                    yield inner_map.get(&(4, i)).cloned().unwrap();
+                                }
+                            }
+                            18 => {
+                                // the bottom row
+                                for i in 0..5 {
+                                    yield inner_map.get(&(i, 4)).cloned().unwrap();
+                                }
+                            }
+                            otherwise => panic!(format!(
+                                "shouldn't have gotten to an inner space from square {:?}",
+                                otherwise
+                            )),
+                        },
+                        _ => yield space,
+                    }
+                }
+            }
         }
     })
 }
@@ -105,17 +140,9 @@ fn num_adjacent_bugs(map: &Map, pos: Pos) -> usize {
         .sum()
 }
 
-fn checked_add_pos(pos: (usize, usize), dxdy: (isize, isize)) -> Option<(usize, usize)> {
+fn add_pos(pos: (usize, usize), dxdy: (isize, isize)) -> (isize, isize) {
     let (dx, dy) = dxdy;
-    Some((checked_add(pos.0, dx)?, checked_add(pos.1, dy)?))
-}
-
-fn checked_add(u: usize, i: isize) -> Option<usize> {
-    if i < 0 {
-        u.checked_sub(i.abs() as usize)
-    } else {
-        u.checked_add(i as usize)
-    }
+    (pos.0 as isize + dx, pos.1 as isize + dy)
 }
 
 #[allow(unused)]
@@ -133,17 +160,19 @@ fn draw(map: &Map) -> String {
         .join("\n")
 }
 
+fn square_number(pos: Pos) -> u32 {
+    let x = pos.0;
+    let y = pos.1;
+    (y as u32 * 5) + x as u32
+}
+
 fn biodiversity(map: &Map) -> usize {
     map.this_map
         .iter()
         .map(|(pos, space)| match space {
             Space::Empty => 0,
             Space::Map(_) => panic!("can't calculate biodiversity of recursive map"),
-            Space::Bug => {
-                let x = pos.0;
-                let y = pos.1;
-                2usize.pow((y as u32 * 5) + x as u32)
-            }
+            Space::Bug => 2usize.pow(square_number(*pos)),
         })
         .sum()
 }
