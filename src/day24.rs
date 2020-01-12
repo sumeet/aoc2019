@@ -21,24 +21,28 @@ type Pos = (usize, usize);
 struct Map {
     this_map: BTreeMap<Pos, Space>,
     parent_map: Option<Box<Map>>,
+    level: isize,
 }
 
 impl Map {
-    fn new(this_map: BTreeMap<Pos, Space>) -> Self {
+    fn empty_with_empty_parent(level: isize) -> Self {
+        Self::new(Self::empty_filling(), None, level)
+    }
+
+    fn new(this_map: BTreeMap<Pos, Space>, parent_map: Option<Box<Map>>, level: isize) -> Self {
         Self {
             this_map,
-            parent_map: None,
+            parent_map,
+            level,
         }
     }
 
-    fn inner_of(outer_map: &Map) -> Self {
-        let mut new_empty_map = (0..5)
+    fn empty_filling() -> BTreeMap<Pos, Space> {
+        let mut new_empty_map: BTreeMap<Pos, Space> = (0..5)
             .flat_map(|x| (0..5).map(move |y| ((x, y), Space::Empty)))
             .collect();
-        Self {
-            parent_map: Some(Box::new(outer_map.clone())),
-            this_map: new_empty_map,
-        }
+        new_empty_map.insert((2, 2), Space::Map(InnerMap::None));
+        new_empty_map
     }
 
     fn get(&self, pos: &Pos) -> Option<&Space> {
@@ -57,7 +61,7 @@ fn parse_part1(input: &str) -> Map {
             };
         }
     }
-    Map::new(map)
+    Map::new(map, None, 0)
 }
 
 fn parse_part2(input: &str) -> Map {
@@ -72,7 +76,7 @@ fn parse_part2(input: &str) -> Map {
             };
         }
     }
-    Map::new(map)
+    Map::new(map, Some(Box::new(Map::empty_with_empty_parent(-1))), 0)
 }
 
 const ADJACENT_DXDYS: [(isize, isize); 4] = [(-1, 0), (1, 0), (0, 1), (0, -1)];
@@ -125,7 +129,7 @@ fn adjacent_tiles(map: &Map, pos: Pos) -> impl Iterator<Item = Space> + '_ {
                     }
                 }
                 // off bottom side, going to square #18
-                (x, y) if y > 4 => {
+                (_x, y) if y > 4 => {
                     if map.parent_map.is_none() {
                         yield Space::Empty;
                     } else {
@@ -168,8 +172,8 @@ fn adjacent_tiles(map: &Map, pos: Pos) -> impl Iterator<Item = Space> + '_ {
                                 }
                             }
                             otherwise => panic!(format!(
-                                "shouldn't have gotten to an inner space from square {:?}",
-                                otherwise
+                                "shouldn't have gotten to an inner space from square {:?} ({:?})",
+                                otherwise, pos
                             )),
                         },
                         _ => yield space,
@@ -226,7 +230,7 @@ fn draw(map: &Map) -> String {
 fn square_number(pos: Pos) -> u32 {
     let x = pos.0;
     let y = pos.1;
-    (y as u32 * 5) + x as u32
+    (y as u32 * 5) + x as u32 + 1
 }
 
 fn biodiversity(map: &Map) -> usize {
@@ -235,7 +239,7 @@ fn biodiversity(map: &Map) -> usize {
         .map(|(pos, space)| match space {
             Space::Empty => 0,
             Space::Map(_) => panic!("can't calculate biodiversity of recursive map"),
-            Space::Bug => 2usize.pow(square_number(*pos)),
+            Space::Bug => 2usize.pow(square_number(*pos) - 1),
         })
         .sum()
 }
@@ -247,10 +251,11 @@ fn generation(map: &Map) -> Map {
         .map(|(pos, space)| {
             let num_adj_bugs = num_adjacent_bugs(map, *pos);
             let space = match space {
-                Space::Map(InnerMap::None) => {
-                    let new_inner_map = Map::inner_of(map);
-                    Space::Map(InnerMap::Map(generation(&new_inner_map)))
-                }
+                Space::Map(InnerMap::None) => Space::Map(InnerMap::Map(Map::new(
+                    Map::empty_filling(),
+                    Some(Box::new(map.clone())),
+                    map.level + 1,
+                ))),
                 Space::Map(InnerMap::Map(inner_map)) => {
                     Space::Map(InnerMap::Map(generation(inner_map)))
                 }
@@ -266,7 +271,11 @@ fn generation(map: &Map) -> Map {
             (*pos, space)
         })
         .collect();
-    Map::new(next_map)
+    Map::new(
+        next_map,
+        Some(Box::new(Map::empty_with_empty_parent(map.level - 1))),
+        map.level,
+    )
 }
 
 #[aoc(day24, part1)]
@@ -282,12 +291,30 @@ fn solve_part1(input: &str) -> usize {
     }
 }
 
+fn print_all_levels(mut map: &Map) {
+    loop {
+        println!("level {}", map.level);
+        println!("{}", draw(map));
+        println!();
+        match map.get(&(2, 2)).unwrap() {
+            Space::Map(InnerMap::Map(inner_map)) => {
+                map = inner_map;
+            }
+            Space::Map(InnerMap::None) => {
+                return;
+            }
+            otherwise => panic!("found a {:?} at pos 2,2", otherwise),
+        }
+    }
+}
+
 #[aoc(day24, part2)]
 fn solve_part2(input: &str) -> usize {
     let mut map = parse_part2(input);
-    for _ in 0..200 {
+    for _ in 0..2 {
         map = generation(&map);
     }
+    print_all_levels(&map);
     num_total_bugs(&map)
 }
 
@@ -322,4 +349,15 @@ fn biodiversity_example() {
 .#...",
     );
     assert_eq!(biodiversity(&map), 2129920);
+}
+
+#[test]
+fn example_2() {
+    let map = parse_part2(
+        "....#
+#..#.
+#.?##
+..#..
+#....",
+    );
 }
