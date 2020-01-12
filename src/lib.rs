@@ -1,6 +1,8 @@
 #![feature(is_sorted)]
 #![feature(generators)]
 #![feature(atomic_min_max)]
+#![feature(const_in_array_repeat_expressions)]
+
 extern crate aoc_runner;
 
 #[macro_use]
