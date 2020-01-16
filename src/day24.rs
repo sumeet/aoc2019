@@ -1,18 +1,55 @@
 use gen_iter::GenIter;
 use itertools::Itertools;
-use std::collections::{BTreeMap, HashSet};
+use lazy_static::lazy_static;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Mutex;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+lazy_static! {
+    static ref MAPS: Mutex<HashMap<isize, Map>> = Mutex::new(HashMap::new());
+}
+
+fn all_maps() -> Vec<Map> {
+    let maps = MAPS.lock().unwrap();
+    let mut all_maps = maps.values().cloned().collect_vec();
+    all_maps.sort_by_key(|map| map.level);
+    all_maps
+}
+
+fn get_map(i: isize) -> Map {
+    let mut maps = MAPS.lock().unwrap();
+    match maps.get(&i) {
+        None => {
+            {
+                maps.insert(i, Map::empty(i));
+                if !maps.contains_key(&(i - 1)) {
+                    maps.insert(i - 1, Map::empty(i - 1));
+                }
+                if !maps.contains_key(&(i + 1)) {
+                    maps.insert(i + 1, Map::empty(i + 1));
+                }
+            }
+            Map::empty(i)
+        }
+        Some(map) => map.clone(),
+    }
+}
+
+fn insert_map(map: Map) {
+    let mut maps = MAPS.lock().unwrap();
+    if !maps.contains_key(&(map.level - 1)) {
+        maps.insert(map.level - 1, Map::empty(map.level - 1));
+    }
+    if !maps.contains_key(&(map.level + 1)) {
+        maps.insert(map.level + 1, Map::empty(map.level + 1));
+    }
+    maps.insert(map.level, map);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Space {
     Empty,
     Bug,
-    Map(InnerMap),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum InnerMap {
-    Map(Map),
-    None,
+    InnerMap,
 }
 
 type Pos = (usize, usize);
@@ -20,29 +57,32 @@ type Pos = (usize, usize);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Map {
     this_map: BTreeMap<Pos, Space>,
-    parent_map: Option<Box<Map>>,
     level: isize,
 }
 
 impl Map {
-    fn empty_with_empty_parent(level: isize) -> Self {
-        Self::new(Self::empty_filling(), None, level)
+    fn empty(level: isize) -> Self {
+        Self::new(Self::empty_filling(), level)
     }
 
-    fn new(this_map: BTreeMap<Pos, Space>, parent_map: Option<Box<Map>>, level: isize) -> Self {
-        Self {
-            this_map,
-            parent_map,
-            level,
-        }
+    fn new(this_map: BTreeMap<Pos, Space>, level: isize) -> Self {
+        Self { this_map, level }
     }
 
     fn empty_filling() -> BTreeMap<Pos, Space> {
         let mut new_empty_map: BTreeMap<Pos, Space> = (0..5)
             .flat_map(|x| (0..5).map(move |y| ((x, y), Space::Empty)))
             .collect();
-        new_empty_map.insert((2, 2), Space::Map(InnerMap::None));
+        new_empty_map.insert((2, 2), Space::InnerMap);
         new_empty_map
+    }
+
+    fn inner_map(&self) -> Map {
+        get_map(self.level + 1)
+    }
+
+    fn parent_map(&self) -> Map {
+        get_map(self.level - 1)
     }
 
     fn get(&self, pos: &Pos) -> Option<&Space> {
@@ -61,7 +101,7 @@ fn parse_part1(input: &str) -> Map {
             };
         }
     }
-    Map::new(map, None, 0)
+    Map::new(map, 0)
 }
 
 fn parse_part2(input: &str) -> Map {
@@ -69,113 +109,92 @@ fn parse_part2(input: &str) -> Map {
     for (y, line) in input.trim().lines().enumerate() {
         for (x, space) in line.chars().enumerate() {
             match (x, y, space) {
-                (2, 2, _) => map.insert((x, y), Space::Map(InnerMap::None)),
+                (2, 2, _) => map.insert((x, y), Space::InnerMap),
                 (_, _, '#') => map.insert((x, y), Space::Bug),
                 (_, _, '.') => map.insert((x, y), Space::Empty),
                 otherwise => panic!(format!("didn't expect {:?}", otherwise)),
             };
         }
     }
-    Map::new(map, Some(Box::new(Map::empty_with_empty_parent(-1))), 0)
+
+    Map::new(map, 0)
 }
 
 const ADJACENT_DXDYS: [(isize, isize); 4] = [(-1, 0), (1, 0), (0, 1), (0, -1)];
 
-fn adjacent_tiles(map: &Map, pos: Pos) -> impl Iterator<Item = Space> + '_ {
+fn adjacent_tiles(map: &Map, from_pos: Pos) -> impl Iterator<Item = Space> + '_ {
     GenIter(move || {
         for dxdy in &ADJACENT_DXDYS {
-            let adj_pos = add_pos(pos, *dxdy);
+            let adj_pos = add_pos(from_pos, *dxdy);
             match adj_pos {
                 // off the left hand side, square number 12
                 (x, _y) if x < 0 => {
-                    if map.parent_map.is_none() {
-                        yield Space::Empty;
-                    } else {
-                        yield map
-                            .parent_map
-                            .as_ref()
-                            .unwrap()
-                            .get(&(1, 2))
-                            .cloned()
-                            .unwrap()
-                    }
+                    assert_eq!(12, square_number((1, 2)));
+                    yield map.parent_map().get(&(1, 2)).cloned().unwrap()
                 }
                 // off the top, going to square #8
                 (_x, y) if y < 0 => {
-                    if map.parent_map.is_none() {
-                        yield Space::Empty;
-                    } else {
-                        yield map
-                            .parent_map
-                            .as_ref()
-                            .unwrap()
-                            .get(&(2, 1))
-                            .cloned()
-                            .unwrap()
-                    }
+                    assert_eq!(8, square_number((2, 1)));
+                    yield map.parent_map().get(&(2, 1)).cloned().unwrap()
                 }
                 // off the right hand side, going to square #14
                 (x, _y) if x > 4 => {
-                    if map.parent_map.is_none() {
-                        yield Space::Empty;
-                    } else {
-                        yield map
-                            .parent_map
-                            .as_ref()
-                            .unwrap()
-                            .get(&(3, 2))
-                            .cloned()
-                            .unwrap()
-                    }
+                    assert_eq!(14, square_number((3, 2)));
+                    yield map.parent_map().get(&(3, 2)).cloned().unwrap()
                 }
                 // off bottom side, going to square #18
                 (_x, y) if y > 4 => {
-                    if map.parent_map.is_none() {
-                        yield Space::Empty;
-                    } else {
-                        yield map
-                            .parent_map
-                            .as_ref()
-                            .unwrap()
-                            .get(&(2, 3))
-                            .cloned()
-                            .unwrap()
-                    }
+                    assert_eq!(18, square_number((2, 3)));
+                    yield map.parent_map().get(&(2, 3)).cloned().unwrap()
                 }
                 (x, y) => {
-                    let space = map.get(&(x as _, y as _)).cloned().unwrap();
+                    let space = map
+                        .get(&(x as _, y as _))
+                        .cloned()
+                        .ok_or_else(|| {
+                            format!(
+                                "dying getting {},{} (lvl {}): Map:\n{}",
+                                x,
+                                y,
+                                map.level,
+                                draw(map)
+                            )
+                        })
+                        .unwrap();
                     match space {
-                        Space::Map(InnerMap::None) => yield Space::Empty,
-                        Space::Map(InnerMap::Map(inner_map)) => match square_number(pos) {
-                            8 => {
-                                // the top row
-                                for i in 0..5 {
-                                    yield inner_map.get(&(i, 0)).cloned().unwrap();
+                        Space::InnerMap => {
+                            let inner_map = map.inner_map();
+                            match square_number(from_pos) {
+                                8 => {
+                                    // the top row
+                                    for i in 0..5 {
+                                        yield inner_map.get(&(i, 0)).cloned().unwrap();
+                                    }
                                 }
-                            }
-                            12 => {
-                                // the left column
-                                for i in 0..5 {
-                                    yield inner_map.get(&(0, i)).cloned().unwrap();
+                                12 => {
+                                    // the left column
+                                    for i in 0..5 {
+                                        yield inner_map.get(&(0, i)).cloned().unwrap();
+                                    }
                                 }
-                            }
-                            14 => {
-                                // the right column
-                                for i in 0..5 {
-                                    yield inner_map.get(&(4, i)).cloned().unwrap();
+                                14 => {
+                                    // the right column
+                                    for i in 0..5 {
+                                        yield inner_map.get(&(4, i)).cloned().unwrap();
+                                    }
                                 }
-                            }
-                            18 => {
-                                // the bottom row
-                                for i in 0..5 {
-                                    yield inner_map.get(&(i, 4)).cloned().unwrap();
+                                18 => {
+                                    // the bottom row
+                                    for i in 0..5 {
+                                        yield inner_map.get(&(i, 4)).cloned().unwrap();
+                                    }
                                 }
+                                otherwise => panic!(format!(
+                                    "shouldn't have gotten to an inner space from square {:?} ({:?})",
+                                    otherwise, from_pos
+                                )),
                             }
-                            otherwise => panic!(format!(
-                                "shouldn't have gotten to an inner space from square {:?} ({:?})",
-                                otherwise, pos
-                            )),
-                        },
+                        }
                         _ => yield space,
                     }
                 }
@@ -190,8 +209,7 @@ fn num_total_bugs(map: &Map) -> usize {
         .map(|(_, space)| match space {
             Space::Empty => 0,
             Space::Bug => 1,
-            Space::Map(InnerMap::Map(inner_map)) => num_total_bugs(inner_map),
-            Space::Map(InnerMap::None) => 0,
+            Space::InnerMap => 0,
         })
         .sum()
 }
@@ -202,7 +220,7 @@ fn num_adjacent_bugs(map: &Map, pos: Pos) -> usize {
         .map(|space| match space {
             Space::Empty => 0,
             Space::Bug => 1,
-            Space::Map(_) => unimplemented!(),
+            Space::InnerMap => panic!("this should never happen"),
         })
         .sum()
 }
@@ -217,10 +235,11 @@ fn draw(map: &Map) -> String {
     (0..5)
         .map(|y| {
             (0..5)
-                .map(|x| match map.get(&(x, y)).unwrap() {
-                    Space::Map(_) => '?',
-                    Space::Empty => '.',
-                    Space::Bug => '#',
+                .map(|x| match map.get(&(x, y)) {
+                    Some(Space::InnerMap) => '?',
+                    Some(Space::Empty) => '.',
+                    Some(Space::Bug) => '#',
+                    None => 'N',
                 })
                 .join("")
         })
@@ -238,7 +257,7 @@ fn biodiversity(map: &Map) -> usize {
         .iter()
         .map(|(pos, space)| match space {
             Space::Empty => 0,
-            Space::Map(_) => panic!("can't calculate biodiversity of recursive map"),
+            Space::InnerMap => panic!("can't calculate biodiversity of recursive map"),
             Space::Bug => 2usize.pow(square_number(*pos) - 1),
         })
         .sum()
@@ -250,15 +269,8 @@ fn generation(map: &Map) -> Map {
         .iter()
         .map(|(pos, space)| {
             let num_adj_bugs = num_adjacent_bugs(map, *pos);
-            let space = match space {
-                Space::Map(InnerMap::None) => Space::Map(InnerMap::Map(Map::new(
-                    Map::empty_filling(),
-                    Some(Box::new(map.clone())),
-                    map.level + 1,
-                ))),
-                Space::Map(InnerMap::Map(inner_map)) => {
-                    Space::Map(InnerMap::Map(generation(inner_map)))
-                }
+            let next_space = match space {
+                Space::InnerMap => Space::InnerMap,
                 Space::Bug => match num_adj_bugs {
                     1 => Space::Bug,
                     _ => Space::Empty,
@@ -268,54 +280,72 @@ fn generation(map: &Map) -> Map {
                     _ => Space::Empty,
                 },
             };
-            (*pos, space)
+            (*pos, next_space)
         })
         .collect();
-    Map::new(
-        next_map,
-        Some(Box::new(Map::empty_with_empty_parent(map.level - 1))),
-        map.level,
-    )
+    Map::new(next_map, map.level)
 }
 
-#[aoc(day24, part1)]
-fn solve_part1(input: &str) -> usize {
-    let mut map = parse_part1(input);
-    let mut seen_maps = HashSet::new();
-    seen_maps.insert(map.clone());
-    loop {
-        map = generation(&map);
-        if !seen_maps.insert(map.clone()) {
-            return biodiversity(&map);
-        }
+//#[aoc(day24, part1)]
+//fn solve_part1(input: &str) -> usize {
+//    let mut map = parse_part1(input);
+//    let mut seen_maps = HashSet::new();
+//    seen_maps.insert(map.clone());
+//    loop {
+//        map = generation(&map);
+//        if !seen_maps.insert(map.clone()) {
+//            return biodiversity(&map);
+//        }
+//    }
+//}
+
+fn print_all_levels() {
+    for map in all_maps() {
+        println!("Level {}\n{}", map.level, draw(&map));
     }
 }
 
-fn print_all_levels(mut map: &Map) {
-    loop {
-        println!("level {}", map.level);
-        println!("{}", draw(map));
-        println!();
-        match map.get(&(2, 2)).unwrap() {
-            Space::Map(InnerMap::Map(inner_map)) => {
-                map = inner_map;
-            }
-            Space::Map(InnerMap::None) => {
-                return;
-            }
-            otherwise => panic!("found a {:?} at pos 2,2", otherwise),
-        }
+fn generate_all_maps() {
+    for map in all_maps() {
+        let next_map = generation(&map);
+        insert_map(next_map);
     }
 }
 
 #[aoc(day24, part2)]
 fn solve_part2(input: &str) -> usize {
-    let mut map = parse_part2(input);
-    for _ in 0..2 {
-        map = generation(&map);
+    let map = parse_part2(input);
+    insert_map(map);
+    //    print_all_levels();
+    //    println!();
+    //    println!();
+    //    println!();
+    //    generate_all_maps();
+    //    print_all_levels();
+    //
+    //
+    //    print_all_levels();
+
+    for _ in 0..200 {
+        generate_all_maps();
     }
-    print_all_levels(&map);
-    num_total_bugs(&map)
+    all_maps().iter().map(num_total_bugs).sum()
+}
+
+#[test]
+fn ex2() {
+    let map = parse_part2(
+        "....#
+#..#.
+#.?##
+..#..
+#....",
+    );
+    insert_map(map);
+    for _ in 0..10 {
+        generate_all_maps();
+    }
+    print_all_levels();
 }
 
 #[test]
