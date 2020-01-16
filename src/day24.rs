@@ -286,19 +286,20 @@ fn generation(map: &Map) -> Map {
     Map::new(next_map, map.level)
 }
 
-//#[aoc(day24, part1)]
-//fn solve_part1(input: &str) -> usize {
-//    let mut map = parse_part1(input);
-//    let mut seen_maps = HashSet::new();
-//    seen_maps.insert(map.clone());
-//    loop {
-//        map = generation(&map);
-//        if !seen_maps.insert(map.clone()) {
-//            return biodiversity(&map);
-//        }
-//    }
-//}
+#[aoc(day24, part1)]
+fn solve_part1(input: &str) -> usize {
+    let mut map = parse_part1(input);
+    let mut seen_maps = HashSet::new();
+    seen_maps.insert(map.clone());
+    loop {
+        map = generation(&map);
+        if !seen_maps.insert(map.clone()) {
+            return biodiversity(&map);
+        }
+    }
+}
 
+#[allow(unused)]
 fn print_all_levels() {
     for map in all_maps() {
         println!("Level {}\n{}", map.level, draw(&map));
@@ -306,8 +307,8 @@ fn print_all_levels() {
 }
 
 fn generate_all_maps() {
-    for map in all_maps() {
-        let next_map = generation(&map);
+    let next_maps = all_maps().iter().map(generation).collect_vec();
+    for next_map in next_maps {
         insert_map(next_map);
     }
 }
@@ -316,16 +317,6 @@ fn generate_all_maps() {
 fn solve_part2(input: &str) -> usize {
     let map = parse_part2(input);
     insert_map(map);
-    //    print_all_levels();
-    //    println!();
-    //    println!();
-    //    println!();
-    //    generate_all_maps();
-    //    print_all_levels();
-    //
-    //
-    //    print_all_levels();
-
     for _ in 0..200 {
         generate_all_maps();
     }
